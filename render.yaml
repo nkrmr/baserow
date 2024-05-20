@@ -2,7 +2,7 @@ services:
   - type: web
     name: baserow
     env: docker
-    plan: starter
+    plan: standard
     region: frankfurt
     dockerfilePath: ./deploy/render/Dockerfile
     envVars:
