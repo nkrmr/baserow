@@ -2,7 +2,8 @@ services:
   - type: web
     name: baserow
     env: docker
-    plan: standard
+    plan: starter
+    region: frankfurt
     dockerfilePath: ./deploy/render/Dockerfile
     envVars:
       - key: SECRET_KEY
@@ -24,9 +25,11 @@ services:
         value: false
   - type: redis
     name: baserow-redis
+    region: frankfurt
     ipAllowList: []
     plan: free
     maxmemoryPolicy: noeviction
 databases:
   - name: baserow-db
+    region: frankfurt
     ipAllowList: []
