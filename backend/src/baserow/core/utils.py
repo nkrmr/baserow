@@ -15,6 +15,7 @@ from itertools import islice
 from numbers import Number
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Type, Union
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import ForeignKey, ManyToManyField, Model
 from django.db.models.fields import NOT_PROVIDED
@@ -339,6 +340,11 @@ def get_value_at_path(obj: Any, path: Union[str | List[str]]) -> Any:
         if isinstance(obj, list) and first.isdigit() and (key := int(first)) < len(obj):
             return _get_value_at_path(obj[key], keys[1:])
         if isinstance(obj, list) and keys[0] == "*":
+            # If we're trying to extract all keys from a list, but
+            # the obj is empty, then return a list. If however an
+            # index is request (rest is not empty), then return None.
+            if len(obj) == 0 and not rest:
+                return []
             # Call recursively this function transforming the `*` in the path in a list
             # of indexes present in the object, e.g:
             # get(obj, "a.*.b") <=> [get(obj, "a.0.b"), get(obj, "a.1.b"), ...]
@@ -990,7 +996,7 @@ def exception_capturer(e):
 
 
 def transaction_on_commit_if_not_already(func):
-    funcs = set(func for _, func in get_connection().run_on_commit or [])
+    funcs = set(func for _, func, _ in get_connection().run_on_commit or [])
     if func not in funcs:
         transaction.on_commit(func)
 
@@ -1017,3 +1023,81 @@ def escape_csv_cell(payload):
         payload = payload.replace("|", "\\|")
         payload = "'" + payload
     return payload
+
+
+def get_baserow_saas_base_url() -> [str, dict]:
+    """
+    Returns the base url of the Baserow SaaS host. In production we always want to
+    connect to api.baserow.io, but in development to the saas dev env for testing
+    purposes.
+
+    :return: The base url and the headers object that must be added to the request.
+    """
+
+    base_url = "https://api.baserow.io"
+    headers = {}
+
+    if settings.DEBUG:
+        base_url = "http://baserow-saas-backend:8000"
+        headers["Host"] = "localhost"
+
+    return base_url, headers
+
+
+def hex_to_rgba(hex_color: str) -> tuple:
+    """
+    Convert a hexadecimal color to an RGBA tuple.
+
+    :param hex_color: The color in hexadecimal format.
+
+    :return: The color as an (R, G, B, A) tuple.
+    """
+
+    hex_color = hex_color.lstrip("#")
+
+    if len(hex_color) == 6:
+        hex_color += "ff"  # Add full opacity if alpha is not specified
+
+    return tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4, 6))
+
+
+def rgba_to_hex(rgba: tuple):
+    """
+    Convert an RGBA tuple to a hexadecimal color.
+
+    Parameters:
+    :param rgba : The color as an (R, G, B, A) tuple.
+
+    :return: The color in hexadecimal format.
+    """
+
+    return "#{:02x}{:02x}{:02x}{:02x}".format(*rgba)
+
+
+def lighten_color(hex_color: str, factor: float):
+    """
+    Lighten a hexadecimal color with alpha by a given factor.
+
+    :param hex_color: The original color in hexadecimal format.
+    :param factor: The factor to lighten the color by. Should be between 0 and 1.
+        A factor of 0 returns the original color, while a factor of 1 returns white.
+
+    :return:  The lightened color in hexadecimal format.
+    """
+
+    # Convert hex color to RGBA
+    rgba = hex_to_rgba(hex_color)
+
+    # Lighten the RGB part of the RGBA color
+    lightened_rgb = tuple(
+        int(channel + (255 - channel) * factor) for channel in rgba[:3]
+    )
+
+    # Keep the alpha channel unchanged
+    alpha = rgba[3]
+
+    # Combine the lightened RGB with the original alpha
+    lightened_rgba = lightened_rgb + (alpha,)
+
+    # Convert the lightened RGBA color back to hex
+    return rgba_to_hex(lightened_rgba)

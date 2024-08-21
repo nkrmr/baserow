@@ -28,15 +28,28 @@
       <div v-if="field.error" class="grid-view__description-icon-error">
         <i v-tooltip="field.error" class="iconoir-warning-triangle"></i>
       </div>
-      <a
-        v-if="!readOnly && showFieldContext"
-        ref="contextLink"
-        class="grid-view__description-options"
-        @click="$refs.context.toggle($refs.contextLink, 'bottom', 'right', 0)"
-        @mousedown.stop
-      >
-        <i class="iconoir-nav-arrow-down"></i>
-      </a>
+      <span class="grid-view__description-options">
+        <HelpIcon
+          v-if="field.description"
+          :tooltip="field.description || ''"
+          :tooltip-content-type="'plain'"
+          :tooltip-content-classes="[
+            'tooltip__content--expandable',
+            'tooltip__content--expandable-plain-text',
+          ]"
+          :icon="'info-empty'"
+        />
+
+        <a
+          v-if="!readOnly && showFieldContext"
+          ref="contextLink"
+          class="grid-view__description-icon-trigger"
+          @click="$refs.context.toggle($refs.contextLink, 'bottom', 'right', 0)"
+          @mousedown.stop
+        >
+          <i class="iconoir-nav-arrow-down"></i>
+        </a>
+      </span>
 
       <FieldContext
         v-if="!readOnly"

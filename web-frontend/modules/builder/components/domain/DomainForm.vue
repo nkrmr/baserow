@@ -2,7 +2,7 @@
   <div>
     <h2 class="box__title">{{ $t('domainSettings.titleAddDomain') }}</h2>
     <Error :error="error"></Error>
-    <FormElement class="control">
+    <FormGroup class="margin-bottom-3">
       <Dropdown
         v-model="selectedDomain"
         :show-search="false"
@@ -15,7 +15,7 @@
           :value="option.value"
         />
       </Dropdown>
-    </FormElement>
+    </FormGroup>
     <component
       :is="currentDomainType.formComponent"
       ref="domainForm"
@@ -25,17 +25,18 @@
       @error="formHasError = $event"
     />
     <div class="actions">
-      <Button
-        type="link"
-        prepend-icon="iconoir-nav-arrow-left"
+      <ButtonText
+        type="secondary"
+        icon="iconoir-nav-arrow-left"
         @click="hideForm"
       >
         {{ $t('action.back') }}
-      </Button>
+      </ButtonText>
+
       <Button
-        :disabled="createLoading || formHasError"
         size="large"
         :loading="createLoading"
+        :disabled="createLoading || formHasError"
         @click="onSubmit"
       >
         {{ $t('action.create') }}

@@ -1,5 +1,8 @@
 import { compile } from 'path-to-regexp'
-import { PAGE_PARAM_TYPE_VALIDATION_FUNCTIONS } from '@baserow/modules/builder/enums'
+import {
+  ALLOWED_LINK_PROTOCOLS,
+  PAGE_PARAM_TYPE_VALIDATION_FUNCTIONS,
+} from '@baserow/modules/builder/enums'
 import { ensureString } from '@baserow/modules/core/utils/validator'
 
 /**
@@ -12,7 +15,7 @@ import { ensureString } from '@baserow/modules/core/utils/validator'
  * @param {Function} resolveFormula A resolveFormula function we'll use if the
  *  element has page parameters which need to be resolved.
  * @param {String} editorMode A builder application's editor mode.
- * @returns {Object} An object containing a resolved URL, and whether the URL is external.
+ * @returns {String} A resolved URL.
  */
 export default function resolveElementUrl(
   element,
@@ -21,10 +24,6 @@ export default function resolveElementUrl(
   editorMode
 ) {
   let resolvedUrl = ''
-  const resolvedContext = {
-    url: '',
-    isExternalLink: false,
-  }
   if (element.navigation_type === 'page') {
     if (!isNaN(element.navigate_to_page_id)) {
       const page = builder.pages.find(
@@ -33,7 +32,7 @@ export default function resolveElementUrl(
 
       // The builder page list might be empty or the page has been deleted
       if (!page) {
-        return resolvedContext
+        return resolvedUrl
       }
 
       const paramTypeMap = Object.fromEntries(
@@ -54,17 +53,27 @@ export default function resolveElementUrl(
   } else {
     resolvedUrl = ensureString(resolveFormula(element.navigate_to_url))
   }
-  resolvedContext.url = prefixInternalResolvedUrl(
+  resolvedUrl = prefixInternalResolvedUrl(
     resolvedUrl,
     builder,
     element.navigation_type,
     editorMode
   )
-  resolvedContext.isExternalLink = isExternalLink(
-    resolvedContext.url,
-    element.navigation_type
-  )
-  return resolvedContext
+
+  // If the protocol is a supported one, return early.
+  const protocolRegex = /^[A-Za-z]+:/
+  if (protocolRegex.test(resolvedUrl)) {
+    for (const protocol of ALLOWED_LINK_PROTOCOLS) {
+      if (resolvedUrl.toLowerCase().startsWith(protocol)) {
+        return resolvedUrl
+      }
+    }
+
+    // Disallow unsupported protocols, e.g. `javascript:`
+    return ''
+  }
+
+  return resolvedUrl
 }
 
 /**
@@ -94,15 +103,4 @@ export function prefixInternalResolvedUrl(
   } else {
     return resolvedUrl
   }
-}
-
-/**
- * Responsible for deciding if the resolvedUrl points to an internal or external source.
- *
- * @param {String} resolvedUrl A URL which `resolveElementUrl` has generated.
- * @param {String} navigationType An element's `navigation_type` (custom / page).
- * @returns {Boolean} Whether this resolvedUrl is external.
- */
-export function isExternalLink(resolvedUrl, navigationType) {
-  return navigationType === 'custom' && !resolvedUrl.startsWith('/')
 }

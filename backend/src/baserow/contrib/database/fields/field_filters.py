@@ -137,12 +137,15 @@ class FilterBuilder:
             raise ValueError(f"Unknown filter type {self._filter_type}.")
 
 
-def contains_filter(field_name, value, model_field, _) -> OptionallyAnnotatedQ:
+def contains_filter(
+    field_name, value, model_field, _, validate=True
+) -> OptionallyAnnotatedQ:
     value = value.strip()
     # If an empty value has been provided we do not want to filter at all.
     if value == "":
         return Q()
-    model_field.get_prep_value(value)
+    if validate:
+        model_field.get_prep_value(value)
     return Q(**{f"{field_name}__icontains": value})
 
 
@@ -166,9 +169,12 @@ def filename_contains_filter(field_name, value, _, field) -> OptionallyAnnotated
     annotation_query = FileNameContainsExpr(
         F(field_name), Value(f"%{value}%"), output_field=BooleanField()
     )
+    hashed_value = hash(value)
     return AnnotatedQ(
-        annotation={f"{field_name}_matches_visible_names": annotation_query},
-        q={f"{field_name}_matches_visible_names": True},
+        annotation={
+            f"{field_name}_matches_visible_names_{hashed_value}": annotation_query
+        },
+        q={f"{field_name}_matches_visible_names_{hashed_value}": True},
     )
 
 

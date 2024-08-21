@@ -12,7 +12,6 @@
     </div>
     <ViewFieldConditionsForm
       v-if="view.filters.length > 0"
-      v-auto-overflow-scroll
       :filters="view.filters"
       :filter-groups="view.filter_groups"
       :disable-filter="disableFilter"
@@ -22,23 +21,27 @@
       :is-public-view="isPublicView"
       :read-only="readOnly"
       :add-condition-string="$t('viewFilterContext.addFilter')"
-      class="filters__items--with-padding filters__items--scrollable"
+      :add-condition-group-string="$t('viewFilterContext.addFilterGroup')"
+      scrollable
+      class="filters__items--with-padding"
       @addFilter="addFilter($event)"
+      @addFilterGroup="addFilter($event)"
       @deleteFilter="deleteFilter($event)"
       @deleteFilterGroup="deleteFilterGroup($event)"
       @updateFilter="updateFilter($event)"
-      @selectOperator="updateView(view, { filter_type: $event })"
-      @selectFilterGroupOperator="updateFilterGroupOperator(view, $event)"
+      @updateFilterType="updateFilterType(view, $event)"
     />
     <div v-if="!disableFilter" class="filters__footer">
       <div class="filters__actions">
-        <a class="filters__add" @click.prevent="addFilter()">
-          <i class="filters__add-icon iconoir-plus"></i>
-          {{ $t('viewFilterContext.addFilter') }}</a
+        <ButtonText icon="iconoir-plus" @click.prevent="addFilter()">
+          {{ $t('viewFilterContext.addFilter') }}</ButtonText
         >
-        <a class="filters__add" @click.prevent="addFilter(uuid())">
-          <i class="filters__add-icon iconoir-plus"></i>
-          {{ $t('viewFilterContext.addFilterGroup') }}</a
+
+        <ButtonText
+          icon="iconoir-plus"
+          @click.prevent="addFilter({ filterGroupId: uuidv1() })"
+        >
+          {{ $t('viewFilterContext.addFilterGroup') }}</ButtonText
         >
       </div>
       <div v-if="view.filters.length > 0">
@@ -55,7 +58,7 @@
 
 <script>
 import { notifyIf } from '@baserow/modules/core/utils/error'
-import { uuid } from '@baserow/modules/core/utils/string'
+import { v1 as uuidv1 } from 'uuid'
 import ViewFieldConditionsForm from '@baserow/modules/database/components/view/ViewFieldConditionsForm'
 import { hasCompatibleFilterTypes } from '@baserow/modules/database/utils/field'
 import viewFilterTypes from '@baserow/modules/database/mixins/viewFilterTypes'
@@ -90,8 +93,8 @@ export default {
     },
   },
   methods: {
-    uuid,
-    async addFilter(filterGroupId = null) {
+    uuidv1,
+    async addFilter({ filterGroupId = null, parentGroupId = null } = {}) {
       try {
         const field = this.getFirstCompatibleField(this.fields)
         if (field === undefined) {
@@ -113,6 +116,7 @@ export default {
             emitEvent: false,
             readOnly: this.readOnly,
             filterGroupId,
+            parentGroupId,
           })
           this.$emit('changed')
         }
@@ -186,7 +190,11 @@ export default {
 
       this.$store.dispatch('view/setItemLoading', { view, value: false })
     },
-    async updateFilterGroupOperator(view, { filterGroup, value }) {
+    async updateFilterType(view, { filterGroup, value }) {
+      if (filterGroup === undefined) {
+        return await this.updateView(view, { filter_type: value })
+      }
+
       this.$store.dispatch('view/setItemLoading', { view, value: true })
       try {
         await this.$store.dispatch('view/updateFilterGroup', {

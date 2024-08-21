@@ -117,20 +117,18 @@
         <div v-if="includeRowDetails" class="grid-view__foot-info">
           {{ $tc('gridView.rowCount', count, { count }) }}
         </div>
-        <template v-if="!publicGrid">
-          <div
-            v-for="field in visibleFields"
-            :key="field.id"
-            :style="{ width: getFieldWidth(field.id) + 'px' }"
-          >
-            <GridViewFieldFooter
-              :database="database"
-              :field="field"
-              :view="view"
-              :store-prefix="storePrefix"
-            />
-          </div>
-        </template>
+        <div
+          v-for="field in visibleFields"
+          :key="field.id"
+          :style="{ width: getFieldWidth(field.id) + 'px' }"
+        >
+          <GridViewFieldFooter
+            :database="database"
+            :field="field"
+            :view="view"
+            :store-prefix="storePrefix"
+          />
+        </div>
       </div>
     </div>
     <GridViewFieldDragging
@@ -342,8 +340,6 @@ export default {
       const groupBySets = groupBys.map((groupBy, groupByIndex) => {
         const groupSpans = []
         let lastGroup = null
-        const field = this.allFieldsInTable.find((f) => f.id === groupBy.field)
-        const fieldType = this.$registry.get('field', field.type)
 
         rows.forEach((row, index) => {
           const previousRow = rows[index - 1]
@@ -358,10 +354,16 @@ export default {
             if (row1 === undefined || row2 === undefined) {
               return false
             }
-
-            return !groupBys.slice(0, groupByIndex + 1).some((groupBy) => {
-              return !fieldType.isEqual(
-                field,
+            return groupBys.slice(0, groupByIndex + 1).every((groupBy) => {
+              const groupByField = this.allFieldsInTable.find(
+                (f) => f.id === groupBy.field
+              )
+              const groupByFieldType = this.$registry.get(
+                'field',
+                groupByField.type
+              )
+              return groupByFieldType.isEqual(
+                groupByField,
                 row1[`field_${groupBy.field}`],
                 row2[`field_${groupBy.field}`]
               )

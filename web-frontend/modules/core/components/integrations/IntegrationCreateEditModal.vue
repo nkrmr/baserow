@@ -14,6 +14,7 @@
         }}</template>
         <p>{{ actualIntegrationType.warning }}</p>
       </Alert>
+
       <IntegrationEditForm
         ref="form"
         :application="application"
@@ -28,6 +29,7 @@
         <Button
           size="large"
           :loading="loading"
+          :disabled="loading"
           @click.prevent="$refs.form.submit()"
         >
           {{ create ? $t('action.create') : $t('action.save') }}

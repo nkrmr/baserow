@@ -1,22 +1,22 @@
 <template>
-  <ul class="header__filter">
-    <li
+  <div class="device-selector">
+    <div
       v-for="(deviceType, index) in deviceTypes"
-      :key="deviceType.getType()"
-      class="header__filter-item"
-      :class="{ 'header__filter-item--no-margin-left': index === 0 }"
+      :key="index"
+      class="device-selector__item"
+      :class="`device-selector__item--${direction}`"
     >
-      <a
-        class="header__filter-link"
-        :class="{
-          'active active--primary': deviceTypeSelected === deviceType.getType(),
-        }"
-        @click="$emit('selected', deviceType.getType())"
-      >
-        <i :class="`header__filter-icon ${deviceType.iconClass}`"></i>
-      </a>
-    </li>
-  </ul>
+      <RadioButton
+        :key="deviceType.getType()"
+        :value="deviceType.getType()"
+        :icon="deviceType.iconClass"
+        :model-value="deviceTypeSelected"
+        class="device-selector__button"
+        @click.native="$emit('selected', deviceType.getType())"
+      ></RadioButton>
+      <slot name="deviceTypeControl" :device-type="deviceType"></slot>
+    </div>
+  </div>
 </template>
 
 <script>
@@ -26,6 +26,11 @@ export default {
     deviceTypeSelected: {
       type: String,
       required: true,
+    },
+    direction: {
+      type: String,
+      required: false,
+      default: 'column',
     },
   },
   computed: {

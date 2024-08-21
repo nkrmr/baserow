@@ -1,5 +1,7 @@
 .ab-form-group {
-  margin-bottom: 20px;
+  &.ab-form-group--with-label {
+    margin-bottom: 10px;
+  }
 
   &.ab-form-group--horizontal,
   &.ab-form-group--horizontal-variable {
@@ -14,6 +16,7 @@
   font-size: 13px;
   font-weight: 500;
   margin-bottom: 12px;
+
   @include flex-align-items(3px);
 
   &.ab-form-group__label--small {

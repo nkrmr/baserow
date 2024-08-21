@@ -36,7 +36,7 @@ export class BaserowFunctionDefinition extends Registerable {
     return ''
   }
 
-  isRollupCompatible() {
+  isRollupCompatible(targetFieldType) {
     return false
   }
 }
@@ -146,9 +146,9 @@ export class BaserowAdd extends BaserowFunctionDefinition {
     return [
       'number + number',
       'text + text',
-      'date + date_interval',
-      'date_interval + date_interval',
-      'date_interval + date',
+      'date + duration',
+      'duration + duration',
+      'duration + date',
       'add(number, number)',
     ]
   }
@@ -185,8 +185,8 @@ export class BaserowMinus extends BaserowFunctionDefinition {
       'number - number',
       'minus(number, number)',
       'date - date',
-      'date - date_interval',
-      'date_interval - date_interval',
+      'date - duration',
+      'duration - duration',
     ]
   }
 
@@ -218,7 +218,12 @@ export class BaserowMultiply extends BaserowFunctionDefinition {
   }
 
   getSyntaxUsage() {
-    return ['number * number', 'multiply(number, number)']
+    return [
+      'number * number',
+      'multiply(number, number)',
+      'multiply(duration, number)',
+      'multiply(number, duration)',
+    ]
   }
 
   getExamples() {
@@ -249,7 +254,11 @@ export class BaserowDivide extends BaserowFunctionDefinition {
   }
 
   getSyntaxUsage() {
-    return ['number / number', 'divide(number, number)']
+    return [
+      'number / number',
+      'divide(number, number)',
+      'divide(duration, number)',
+    ]
   }
 
   getExamples() {
@@ -566,6 +575,52 @@ export class BaserowIsBlank extends BaserowFunctionDefinition {
 
   getFormulaType() {
     return 'boolean'
+  }
+}
+
+export class BaserowDurationToSeconds extends BaserowFunctionDefinition {
+  static getType() {
+    return 'toseconds'
+  }
+
+  getDescription() {
+    const { i18n } = this.app
+    return i18n.t('formulaFunctions.durationToSecondsDescription')
+  }
+
+  getSyntaxUsage() {
+    return ['toseconds(duration)']
+  }
+
+  getExamples() {
+    return ["toseconds(duration('10 minutes'))"]
+  }
+
+  getFormulaType() {
+    return 'number'
+  }
+}
+
+export class BaserowSecondsToDuration extends BaserowFunctionDefinition {
+  static getType() {
+    return 'toduration'
+  }
+
+  getDescription() {
+    const { i18n } = this.app
+    return i18n.t('formulaFunctions.secondsToDurationDescription')
+  }
+
+  getSyntaxUsage() {
+    return ['toduration(number)']
+  }
+
+  getExamples() {
+    return ['toduration(60)']
+  }
+
+  getFormulaType() {
+    return 'duration'
   }
 }
 
@@ -992,7 +1047,7 @@ export class BaserowDateInterval extends BaserowFunctionDefinition {
   }
 
   getFormulaType() {
-    return 'date_interval'
+    return 'duration'
   }
 }
 
@@ -1167,7 +1222,7 @@ export class BaserowCount extends BaserowFunctionDefinition {
     return 'array'
   }
 
-  isRollupCompatible() {
+  isRollupCompatible(targetFieldType) {
     return true
   }
 }
@@ -2009,7 +2064,7 @@ export class BaserowAny extends BaserowFunctionDefinition {
     return 'array'
   }
 
-  isRollupCompatible() {
+  isRollupCompatible(targetFieldType) {
     return true
   }
 }
@@ -2036,7 +2091,7 @@ export class BaserowEvery extends BaserowFunctionDefinition {
     return 'array'
   }
 
-  isRollupCompatible() {
+  isRollupCompatible(targetFieldType) {
     return true
   }
 }
@@ -2068,7 +2123,7 @@ export class BaserowMax extends BaserowFunctionDefinition {
     return 'array'
   }
 
-  isRollupCompatible() {
+  isRollupCompatible(targetFieldType) {
     return true
   }
 }
@@ -2100,7 +2155,7 @@ export class BaserowMin extends BaserowFunctionDefinition {
     return 'array'
   }
 
-  isRollupCompatible() {
+  isRollupCompatible(targetFieldType) {
     return true
   }
 }
@@ -2158,7 +2213,7 @@ export class BaserowStddevPop extends BaserowFunctionDefinition {
     return 'array'
   }
 
-  isRollupCompatible() {
+  isRollupCompatible(targetFieldType) {
     return true
   }
 }
@@ -2189,7 +2244,7 @@ export class BaserowStddevSample extends BaserowFunctionDefinition {
     return 'array'
   }
 
-  isRollupCompatible() {
+  isRollupCompatible(targetFieldType) {
     return true
   }
 }
@@ -2220,7 +2275,7 @@ export class BaserowVarianceSample extends BaserowFunctionDefinition {
     return 'array'
   }
 
-  isRollupCompatible() {
+  isRollupCompatible(targetFieldType) {
     return true
   }
 }
@@ -2251,7 +2306,7 @@ export class BaserowVariancePop extends BaserowFunctionDefinition {
     return 'array'
   }
 
-  isRollupCompatible() {
+  isRollupCompatible(targetFieldType) {
     return true
   }
 }
@@ -2282,7 +2337,7 @@ export class BaserowAvg extends BaserowFunctionDefinition {
     return 'array'
   }
 
-  isRollupCompatible() {
+  isRollupCompatible(targetFieldType) {
     return true
   }
 }
@@ -2313,7 +2368,7 @@ export class BaserowSum extends BaserowFunctionDefinition {
     return 'array'
   }
 
-  isRollupCompatible() {
+  isRollupCompatible(targetFieldType) {
     return true
   }
 }

@@ -55,6 +55,10 @@
   .control__elements--small {
     margin-bottom: 0;
   }
+
+  .control--horizontal.control--after-input .control__wrapper {
+    flex-basis: 100%;
+  }
 }
 
 .table-element-form__field-label .form-input__input-wrapper {
@@ -63,4 +67,8 @@
   .form-input {
     flex: 1;
   }
+}
+
+.table-element-form__refresh-fields-button {
+  margin-bottom: 6px;
 }

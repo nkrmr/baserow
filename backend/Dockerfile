@@ -1,5 +1,5 @@
 # syntax = docker/dockerfile:1.3
-FROM debian:bullseye-slim as base
+FROM debian:bookworm-slim as base
 
 ARG UID
 ENV UID=${UID:-9999}
@@ -13,7 +13,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN groupadd -g $GID baserow_docker_group || exit 0
 RUN useradd --shell /bin/bash -u $UID -g $GID -o -c "" -m baserow_docker_user -l || exit 0
 ENV DOCKER_USER=baserow_docker_user
-ENV POSTGRES_VERSION=11
+ENV POSTGRES_VERSION=15
 ENV BASEROW_IMAGE_TYPE="backend"
 
 RUN apt-get update &&  \
@@ -40,8 +40,7 @@ RUN apt-get update &&  \
     python3 \
     python3-pip \
     python3-dev \
-    nano \
-    vim \
+    python3-venv\
     git \
     gosu \
     xmlsec1 \
@@ -57,8 +56,7 @@ COPY --chown=$UID:$GID ./backend/docker/mime.types /etc/
 
 # Install non-dev base dependencies into a virtual env.
 COPY --chown=$UID:$GID ./backend/requirements/base.txt /baserow/requirements/
-RUN python3 -m pip install --no-cache-dir --no-warn-script-location --disable-pip-version-check --upgrade pip==23.1.2
-RUN python3 -m pip install --no-cache-dir --no-warn-script-location --upgrade virtualenv==20.23.1 && python3 -m virtualenv /baserow/venv
+RUN python3 -m venv /baserow/venv
 
 ENV PIP_CACHE_DIR=/tmp/baserow_pip_cache
 # hadolint ignore=SC1091,DL3042
@@ -87,11 +85,14 @@ WORKDIR /baserow/backend
 # Ensure that Python outputs everything that's printed inside
 # the application rather than buffering it.
 ENV PYTHONUNBUFFERED 1
-ENV PYTHONPATH $PYTHONPATH:/baserow/backend/src:/baserow/premium/backend/src:/baserow/enterprise/backend/src
 
 COPY --chown=$UID:$GID ./deploy/plugins/*.sh /baserow/plugins/
+
 RUN dos2unix /baserow/backend/docker/docker-entrypoint.sh && \
-    chmod a+x /baserow/backend/docker/docker-entrypoint.sh
+    chmod a+x /baserow/backend/docker/docker-entrypoint.sh && \
+    /baserow/venv/bin/pip install --no-cache-dir -e /baserow/backend/ && \
+    /baserow/venv/bin/pip install --no-cache-dir -e /baserow/premium/backend/ && \
+    /baserow/venv/bin/pip install --no-cache-dir -e /baserow/enterprise/backend/
 
 HEALTHCHECK --interval=60s CMD ["/bin/bash", "/baserow/backend/docker/docker-entrypoint.sh", "backend-healthcheck"]
 ENTRYPOINT ["/usr/bin/tini", "--", "/bin/bash", "/baserow/backend/docker/docker-entrypoint.sh"]

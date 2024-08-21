@@ -1,14 +1,20 @@
 <template>
-  <div
-    :style="{
-      '--button-color': resolveColor(element.button_color, colorVariables),
-    }"
-    class="table-element"
-  >
-    <BaserowTable :fields="element.fields" :rows="rows">
-      <template #cell-content="{ field, value }">
+  <div class="table-element">
+    <BaserowTable
+      :fields="element.fields"
+      :rows="rows"
+      :orientation="orientation"
+    >
+      <template #cell-content="{ rowIndex, field, value }">
         <component
           :is="collectionFieldTypes[field.type].component"
+          :element="element"
+          :field="field"
+          :application-context-additions="{
+            recordIndex: rowIndex,
+            recordIndexPath: [...applicationContext.recordIndexPath, rowIndex],
+            field,
+          }"
           v-bind="value"
         />
       </template>
@@ -19,8 +25,14 @@
       </template>
     </BaserowTable>
     <div class="table-element__footer">
-      <ABButton v-if="hasMorePage" :disabled="loading" @click="loadMore()">
-        {{ $t('tableElement.showMore') }}
+      <ABButton
+        v-if="hasMorePage"
+        :style="getStyleOverride('button')"
+        :disabled="contentLoading"
+        :loading="contentLoading"
+        @click="loadMore()"
+      >
+        {{ resolvedButtonLoadMoreLabel || $t('tableElement.showMore') }}
       </ABButton>
     </div>
   </div>
@@ -29,19 +41,15 @@
 <script>
 import element from '@baserow/modules/builder/mixins/element'
 import RuntimeFormulaContext from '@baserow/modules/core/runtimeFormulaContext'
-import { resolveFormula } from '@baserow/modules/core/formula'
 import { uuid } from '@baserow/modules/core/utils/string'
-import { mapActions, mapGetters } from 'vuex'
-import { DataProviderType } from '@baserow/modules/core/dataProviderTypes'
 import BaserowTable from '@baserow/modules/builder/components/elements/components/BaserowTable'
-import { notifyIf } from '@baserow/modules/core/utils/error'
+import collectionElement from '@baserow/modules/builder/mixins/collectionElement'
 import { ensureString } from '@baserow/modules/core/utils/validator'
-import _ from 'lodash'
 
 export default {
   name: 'TableElement',
   components: { BaserowTable },
-  mixins: [element],
+  mixins: [element, collectionElement],
   props: {
     /**
      * @type {Object}
@@ -49,34 +57,15 @@ export default {
      *   display.
      * @property {Object} fields - The fields of the data source.
      * @property {int} items_per_page - The number of items per page.
+     * @property {string} button_color - The color of the button.
+     * @property {string} orientation - The orientation for eaceh device.
      */
     element: {
       type: Object,
       required: true,
     },
   },
-  data() {
-    return {
-      // The first page has been loaded by the data provider at page load already
-      currentOffset: this.element.items_per_page,
-      resetTimeout: null,
-      errorNotified: false,
-    }
-  },
   computed: {
-    ...mapGetters({
-      getLoading: 'elementContent/getLoading',
-      getHasMorePage: 'elementContent/getHasMorePage',
-      getElementContent: 'elementContent/getElementContent',
-      getReset: 'elementContent/getReset',
-      getPageDataSourceById: 'dataSource/getPageDataSourceById',
-    }),
-    dataSource() {
-      if (!this.element.data_source_id) {
-        return null
-      }
-      return this.getPageDataSourceById(this.page, this.element.data_source_id)
-    },
     fields() {
       if (!this.element.fields) {
         return []
@@ -85,17 +74,6 @@ export default {
         ...field,
         __id__: index,
       }))
-    },
-    elementContent() {
-      if (
-        !this.element.data_source_id ||
-        !this.getElementContent(this.element) ||
-        this.fields.length === 0
-      ) {
-        return []
-      }
-
-      return this.getElementContent(this.element)
     },
     rows() {
       return this.elementContent.map((row, rowIndex) => {
@@ -117,78 +95,21 @@ export default {
         return newRow
       })
     },
-    hasMorePage() {
-      return this.getHasMorePage(this.element)
-    },
-    loading() {
-      return this.getLoading(this.element)
-    },
-    reset() {
-      return this.getReset(this.element)
-    },
     collectionFieldTypes() {
       return this.$registry.getAll('collectionField')
     },
-    dispatchContext() {
-      return DataProviderType.getAllDataSourceDispatchContext(
-        this.$registry.getAll('builderDataProvider'),
-        this.applicationContext
+    orientation() {
+      const device = this.$store.getters['page/getDeviceTypeSelected']
+      return this.element.orientation[device]
+    },
+    resolvedButtonLoadMoreLabel() {
+      return ensureString(
+        this.resolveFormula(this.element.button_load_more_label)
       )
     },
   },
-  watch: {
-    reset() {
-      this.debouncedReset()
-    },
-    'element.data_source_id'() {
-      this.debouncedReset()
-    },
-    'element.items_per_page'() {
-      this.debouncedReset()
-    },
-    dispatchContext: {
-      handler(newValue, prevValue) {
-        if (!_.isEqual(newValue, prevValue)) {
-          this.debouncedReset()
-        }
-      },
-      deep: true,
-    },
-  },
-  async mounted() {
-    if (this.element.data_source_id) {
-      await this.fetchContent([0, this.element.items_per_page])
-    }
-  },
+
   methods: {
-    ...mapActions({
-      fetchElementContent: 'elementContent/fetchElementContent',
-      clearElementContent: 'elementContent/clearElementContent',
-    }),
-    async fetchContent(range, replace) {
-      try {
-        await this.fetchElementContent({
-          element: this.element,
-          dataSource: this.dataSource,
-          data: this.dispatchContext,
-          range,
-          replace,
-        })
-      } catch (error) {
-        if (!this.errorNotified) {
-          this.errorNotified = true
-          notifyIf(error)
-        }
-      }
-    },
-    debouncedReset() {
-      clearTimeout(this.resetTimeout)
-      this.resetTimeout = setTimeout(() => {
-        this.errorNotified = false
-        this.currentOffset = 0
-        this.loadMore(true)
-      }, 500)
-    },
     resolveRowFormula(formula, index) {
       const formulaContext = new Proxy(
         new RuntimeFormulaContext(
@@ -205,20 +126,10 @@ export default {
         }
       )
       try {
-        return ensureString(
-          resolveFormula(formula, this.formulaFunctions, formulaContext)
-        )
+        return ensureString(this.resolveFormula(formula, formulaContext))
       } catch {
         return ''
       }
-    },
-    async loadMore(replace = false) {
-      await this.fetchContent(
-        [this.currentOffset, this.element.items_per_page],
-        replace
-      )
-
-      this.currentOffset += this.element.items_per_page
     },
   },
 }

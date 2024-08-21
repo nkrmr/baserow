@@ -2,7 +2,7 @@
   <div>
     <div class="control">
       <template v-if="filename === ''">
-        <label class="control__label">{{
+        <label class="control__label control__label--small">{{
           $t('tableJSONImporter.fileLabel')
         }}</label>
         <div class="control__description">
@@ -35,14 +35,16 @@
             accept=".json"
             @change="select($event)"
           />
-          <a
-            class="button button--large button--ghost file-upload__button"
-            :class="{ 'button--loading': state !== null }"
+          <Button
+            type="upload"
+            size="large"
+            icon="iconoir-cloud-upload"
+            class="file-upload__button"
+            :loading="state !== null"
             @click.prevent="$refs.file.click($event)"
           >
-            <i class="iconoir-cloud-upload"></i>
             {{ $t('tableJSONImporter.chooseButton') }}
-          </a>
+          </Button>
           <div v-if="state === null" class="file-upload__file">
             {{ filename }}
           </div>
@@ -57,12 +59,12 @@
           </template>
         </div>
         <div v-if="$v.filename.$error" class="error">
-          {{ $t('error.fieldRequired') }}
+          {{ $t('error.requiredField') }}
         </div>
       </div>
     </div>
-    <div v-if="filename !== ''" class="control">
-      <label class="control__label">{{
+    <div v-if="filename !== ''" class="control margin-top-2">
+      <label class="control__label control__label--small">{{
         $t('tableJSONImporter.encodingLabel')
       }}</label>
       <div class="control__elements">

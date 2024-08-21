@@ -176,7 +176,6 @@ class FieldsView(APIView):
             ListFieldsOperationType.type,
             workspace=table.database.workspace,
             context=table,
-            allow_if_template=True,
         )
 
         TokenHandler().check_table_permissions(
@@ -243,7 +242,8 @@ class FieldsView(APIView):
     )
     @transaction.atomic
     @validate_body_custom_fields(
-        field_type_registry, base_serializer_class=CreateFieldSerializer
+        field_type_registry,
+        base_serializer_class=CreateFieldSerializer,
     )
     @map_exceptions(
         {

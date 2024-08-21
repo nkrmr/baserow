@@ -1,10 +1,12 @@
 <template>
-  <form @submit.prevent @keydown.enter.prevent>
-    <FormElement class="control">
-      <label class="control__label">
-        {{ $t('tableElementForm.dataSource') }}
-      </label>
-      <div class="control__elements">
+  <form class="table-element-form" @submit.prevent @keydown.enter.prevent>
+    <FormGroup
+      class="margin-bottom-2"
+      small-label
+      required
+      :label="$t('tableElementForm.dataSource')"
+    >
+      <div @click="userHasChangedDataSource = true">
         <Dropdown v-model="values.data_source_id" :show-search="false">
           <DropdownItem
             v-for="dataSource in availableDataSources"
@@ -14,31 +16,50 @@
           />
         </Dropdown>
       </div>
-    </FormElement>
-    <FormInput
-      v-model="values.items_per_page"
+    </FormGroup>
+
+    <FormGroup
+      class="margin-bottom-2"
+      small-label
       :label="$t('tableElementForm.itemsPerPage')"
-      :placeholder="$t('tableElementForm.itemsPerPagePlaceholder')"
-      :to-value="(value) => parseInt(value)"
-      :error="
-        $v.values.items_per_page.$dirty && !$v.values.items_per_page.required
-          ? $t('error.requiredField')
-          : !$v.values.items_per_page.integer
-          ? $t('error.integerField')
-          : !$v.values.items_per_page.minValue
-          ? $t('error.minValueField', { min: 1 })
-          : !$v.values.items_per_page.maxValue
-          ? $t('error.maxValueField', { max: maxItemPerPage })
-          : ''
-      "
-      type="number"
-      @blur="$v.values.items_per_page.$touch()"
-    ></FormInput>
-    <FormElement class="control">
-      <label class="control__label">
-        {{ $t('tableElementForm.fields') }}
-      </label>
+      required
+      :error-message="errorMessageItemsPerPage"
+    >
+      <FormInput
+        v-model="values.items_per_page"
+        size="large"
+        :placeholder="$t('tableElementForm.itemsPerPagePlaceholder')"
+        :to-value="(value) => parseInt(value)"
+        type="number"
+        @blur="$v.values.items_per_page.$touch()"
+      />
+    </FormGroup>
+
+    <CustomStyle
+      v-model="values.styles"
+      style-key="button"
+      :config-block-types="['button']"
+      :theme="builder.theme"
+    />
+    <ApplicationBuilderFormulaInputGroup
+      v-model="values.button_load_more_label"
+      :label="$t('tableElementForm.buttonLoadMoreLabel')"
+      :placeholder="$t('elementForms.textInputPlaceholder')"
+      :data-providers-allowed="DATA_PROVIDERS_ALLOWED_ELEMENTS"
+      class="margin-bottom-2"
+    />
+
+    <FormSection class="margin-bottom-2" :title="$t('tableElementForm.fields')">
       <template v-if="values.data_source_id">
+        <ButtonText
+          type="primary"
+          icon="iconoir-refresh-double"
+          size="small"
+          class="table-element-form__refresh-fields-button"
+          @click="refreshFieldsFromDataSource"
+        >
+          {{ $t('tableElementForm.refreshFieldsFromDataSource') }}
+        </ButtonText>
         <div>
           <Expandable
             v-for="(field, index) in values.fields"
@@ -46,6 +67,11 @@
             v-sortable="{
               id: field.id,
               update: orderFields,
+              enabled: $hasPermission(
+                'builder.page.element.update',
+                element,
+                workspace.id
+              ),
               handle: '[data-sortable-handle]',
             }"
             class="table-element-form__field"
@@ -67,7 +93,6 @@
                   {{ field.name }}
                 </div>
                 <i
-                  class="fas"
                   :class="
                     expanded
                       ? 'iconoir-nav-arrow-down'
@@ -77,13 +102,12 @@
               </div>
             </template>
             <template #default>
-              <FormInput
-                v-model="field.name"
-                class="table-element-form__field-label"
-                label="Name"
-                small
+              <FormGroup
+                small-label
                 horizontal
-                :error="
+                required
+                :label="$t('tableElementForm.name')"
+                :error-message="
                   !$v.values.fields.$each[index].name.required
                     ? $t('error.requiredField')
                     : !$v.values.fields.$each[index].name.maxLength
@@ -91,59 +115,83 @@
                     : ''
                 "
               >
+                <FormInput
+                  v-model="field.name"
+                  class="table-element-form__field-label"
+                >
+                </FormInput>
                 <template v-if="values.fields.length > 1" #after-input>
-                  <Button
-                    icon="iconoir-bin"
-                    type="light"
-                    @click="removeField(field)"
-                  />
+                  <ButtonIcon icon="iconoir-bin" @click="removeField(field)" />
                 </template>
-              </FormInput>
-              <FormElement class="control control--horizontal">
-                <label class="control__label">
-                  {{ $t('tableElementForm.fieldType') }}
-                </label>
-                <div class="control__elements">
-                  <Dropdown
-                    small
-                    :value="field.type"
-                    :show-search="false"
-                    @input="changeFieldType(field, $event)"
-                  >
-                    <DropdownItem
-                      v-for="collectionType in orderedCollectionTypes"
-                      :key="collectionType.getType()"
-                      :name="collectionType.name"
-                      :value="collectionType.getType()"
-                    />
-                  </Dropdown>
-                </div>
-              </FormElement>
+              </FormGroup>
+
+              <FormGroup
+                small-label
+                horizontal
+                required
+                :label="$t('tableElementForm.fieldType')"
+              >
+                <Dropdown
+                  small
+                  :value="field.type"
+                  :show-search="false"
+                  @input="changeFieldType(field, $event)"
+                >
+                  <DropdownItem
+                    v-for="collectionType in orderedCollectionTypes"
+                    :key="collectionType.getType()"
+                    :name="collectionType.name"
+                    :value="collectionType.getType()"
+                  />
+                </Dropdown>
+              </FormGroup>
               <component
                 :is="collectionTypes[field.type].formComponent"
                 :element="element"
                 :default-values="field"
+                :application-context-additions="{
+                  collectionField: field,
+                }"
                 @values-changed="updateField(field, $event)"
               />
             </template>
           </Expandable>
         </div>
-        <Button
-          prepend-icon="baserow-icon-plus"
-          type="link"
-          size="tiny"
+        <ButtonText
+          type="primary"
+          icon="iconoir-plus"
+          size="small"
           @click="addField"
         >
           {{ $t('tableElementForm.addField') }}
-        </Button>
+        </ButtonText>
       </template>
       <p v-else>{{ $t('tableElementForm.selectSourceFirst') }}</p>
-    </FormElement>
-    <ColorInputGroup
-      v-model="values.button_color"
-      :label="$t('tableElementForm.buttonColor')"
-      :color-variables="colorVariables"
-    />
+    </FormSection>
+    <FormGroup :label="$t('tableElementForm.orientation')" small-label required>
+      <DeviceSelector
+        :device-type-selected="deviceTypeSelected"
+        direction="row"
+        @selected="actionSetDeviceTypeSelected"
+      >
+        <template #deviceTypeControl="{ deviceType }">
+          <RadioButton
+            v-model="values.orientation[deviceType.getType()]"
+            icon="iconoir-view-columns-3"
+            :value="TABLE_ORIENTATION.HORIZONTAL"
+          >
+            {{ $t('tableElementForm.orientationHorizontal') }}
+          </RadioButton>
+          <RadioButton
+            v-model="values.orientation[deviceType.getType()]"
+            icon="iconoir-table-rows"
+            :value="TABLE_ORIENTATION.VERTICAL"
+          >
+            {{ $t('tableElementForm.orientationVertical') }}
+          </RadioButton>
+        </template>
+      </DeviceSelector>
+    </FormGroup>
   </form>
 </template>
 
@@ -160,54 +208,46 @@ import {
   minValue,
   maxValue,
 } from 'vuelidate/lib/validators'
-import { mapGetters } from 'vuex'
 import elementForm from '@baserow/modules/builder/mixins/elementForm'
+import collectionElementForm from '@baserow/modules/builder/mixins/collectionElementForm'
+import { TABLE_ORIENTATION } from '@baserow/modules/builder/enums'
+import DeviceSelector from '@baserow/modules/builder/components/page/header/DeviceSelector.vue'
+import { mapActions, mapGetters } from 'vuex'
+import CustomStyle from '@baserow/modules/builder/components/elements/components/forms/style/CustomStyle'
 
 export default {
   name: 'TableElementForm',
-  components: { ApplicationBuilderFormulaInputGroup },
-  mixins: [elementForm],
+  components: {
+    ApplicationBuilderFormulaInputGroup,
+    DeviceSelector,
+    CustomStyle,
+  },
+  mixins: [elementForm, collectionElementForm],
   data() {
     return {
-      allowedValues: ['data_source_id', 'fields', 'items_per_page'],
+      allowedValues: [
+        'data_source_id',
+        'fields',
+        'items_per_page',
+        'orientation',
+        'styles',
+        'button_load_more_label',
+      ],
       values: {
+        fields: [],
         data_source_id: null,
         items_per_page: 1,
-        fields: [],
+        styles: {},
+        orientation: {},
+        button_load_more_label: '',
       },
+      userHasChangedDataSource: false,
     }
   },
   computed: {
-    dataSources() {
-      return this.$store.getters['dataSource/getPageDataSources'](this.page)
-    },
-    availableDataSources() {
-      return this.dataSources.filter(
-        (dataSource) =>
-          dataSource.type &&
-          this.$registry.get('service', dataSource.type).returnsList
-      )
-    },
-    selectedDataSource() {
-      if (!this.values.data_source_id) {
-        return null
-      }
-      return this.$store.getters['dataSource/getPageDataSourceById'](
-        this.page,
-        this.values.data_source_id
-      )
-    },
-    selectedDataSourceType() {
-      if (!this.selectedDataSource || !this.selectedDataSource.type) {
-        return null
-      }
-      return this.$registry.get('service', this.selectedDataSource.type)
-    },
-    maxItemPerPage() {
-      if (!this.selectedDataSourceType) {
-        return 20
-      }
-      return this.selectedDataSourceType.maxResultLimit
+    ...mapGetters({ deviceTypeSelected: 'page/getDeviceTypeSelected' }),
+    TABLE_ORIENTATION() {
+      return TABLE_ORIENTATION
     },
     orderedCollectionTypes() {
       return this.$registry.getOrderedList('collectionField')
@@ -215,23 +255,33 @@ export default {
     collectionTypes() {
       return this.$registry.getAll('collectionField')
     },
-    ...mapGetters({
-      element: 'element/getSelected',
-    }),
+    errorMessageItemsPerPage() {
+      return this.$v.values.items_per_page.$dirty &&
+        !this.$v.values.items_per_page.required
+        ? this.$t('error.requiredField')
+        : !this.$v.values.items_per_page.integer
+        ? this.$t('error.integerField')
+        : !this.$v.values.items_per_page.minValue
+        ? this.$t('error.minValueField', { min: 1 })
+        : !this.$v.values.items_per_page.maxValue
+        ? this.$t('error.maxValueField', { max: this.maxItemPerPage })
+        : ''
+    },
   },
   watch: {
-    'dataSources.length'(newValue, oldValue) {
-      if (this.values.data_source_id && oldValue > newValue) {
-        if (
-          !this.dataSources.some(({ id }) => id === this.values.data_source_id)
-        ) {
-          // Remove the data_source_id if the related dataSource has been deleted.
-          this.values.data_source_id = null
+    async 'values.data_source_id'(newValue, oldValue) {
+      if (newValue && !oldValue) {
+        await this.$nextTick()
+        if (this.userHasChangedDataSource) {
+          this.refreshFieldsFromDataSource()
         }
       }
     },
   },
   methods: {
+    ...mapActions({
+      actionSetDeviceTypeSelected: 'page/setDeviceTypeSelected',
+    }),
     addField() {
       this.values.fields.push({
         name: getNextAvailableNameInSequence(
@@ -241,12 +291,20 @@ export default {
         value: '',
         type: 'text',
         id: uuid(), // Temporary id
+        uid: uuid(),
       })
     },
     changeFieldType(fieldToUpdate, newType) {
       this.values.fields = this.values.fields.map((field) => {
         if (field.id === fieldToUpdate.id) {
-          return { id: field.id, name: field.name, type: newType }
+          // When the type of the workflow action changes we assign a new UID to
+          // trigger the backend workflow action removal
+          return {
+            id: field.id,
+            uid: uuid(),
+            name: field.name,
+            type: newType,
+          }
         }
         return field
       })
@@ -273,6 +331,17 @@ export default {
         field,
         builder: this.builder,
       })
+    },
+    refreshFieldsFromDataSource() {
+      if (this.selectedDataSource?.type) {
+        const serviceType = this.$registry.get(
+          'service',
+          this.selectedDataSource.type
+        )
+        this.values.fields = serviceType.getDefaultCollectionFields(
+          this.selectedDataSource
+        )
+      }
     },
   },
   validations() {

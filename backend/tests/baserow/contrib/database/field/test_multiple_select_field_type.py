@@ -10,8 +10,8 @@ import pytest
 from faker import Faker
 from pytest_unordered import unordered
 
-from baserow.contrib.database.fields.deferred_field_fk_updater import (
-    DeferredFieldFkUpdater,
+from baserow.contrib.database.fields.deferred_foreign_key_updater import (
+    DeferredForeignKeyUpdater,
 )
 from baserow.contrib.database.fields.exceptions import (
     AllProvidedMultipleSelectValuesMustBeSelectOption,
@@ -742,7 +742,7 @@ def test_import_export_multiple_select_field(data_fixture):
         field_serialized,
         ImportExportConfig(include_permission_data=True),
         id_mapping,
-        DeferredFieldFkUpdater(),
+        DeferredForeignKeyUpdater(),
     )
 
     assert field_imported.select_options.all().count() == 4
@@ -787,7 +787,7 @@ def test_import_serialized_value_with_missing_select_options(data_fixture):
         serialized,
         config,
         {},
-        DeferredFieldFkUpdater(),
+        DeferredForeignKeyUpdater(),
     )
 
     imported_model = imported_database.table_set.all()[0].get_model(
@@ -1719,7 +1719,7 @@ def test_multiple_select_with_single_select_present(data_fixture):
     single_options = multiple_select_field.select_options.all()
     first_select_option = single_options[0]
 
-    assert type(first_select_option) == SelectOption
+    assert type(first_select_option) is SelectOption
 
     row = row_handler.create_row(
         user=user,
@@ -2720,6 +2720,223 @@ def test_list_rows_with_group_by_and_many_to_many_field(api_client, data_fixture
                         select_option_2.id,
                         select_option_3.id,
                     ],
+                    "count": 1,
+                },
+            ]
+        ),
+    }
+
+
+@pytest.mark.django_db
+def test_get_group_by_metadata_in_rows_multiple_and_single_select_fields(data_fixture):
+    user = data_fixture.create_user()
+    table = data_fixture.create_database_table(user=user)
+    text_field = data_fixture.create_text_field(
+        table=table, order=0, name="Color", text_default="white"
+    )
+    multiple_select_field = data_fixture.create_multiple_select_field(table=table)
+    ms_option_1 = data_fixture.create_select_option(
+        field=multiple_select_field,
+        order=1,
+        value="A",
+        color="blue",
+    )
+    ms_option_2 = data_fixture.create_select_option(
+        field=multiple_select_field,
+        order=2,
+        value="B",
+        color="blue",
+    )
+
+    single_select_field = data_fixture.create_single_select_field(table=table)
+    ss_option_1 = data_fixture.create_select_option(
+        field=single_select_field,
+        order=1,
+        value="1",
+        color="blue",
+    )
+    ss_option_2 = data_fixture.create_select_option(
+        field=single_select_field,
+        order=2,
+        value="2",
+        color="blue",
+    )
+
+    RowHandler().create_row(
+        user=user,
+        table=table,
+        values={
+            f"field_{text_field.id}": "Row 1",
+            f"field_{multiple_select_field.id}": [],
+            f"field_{single_select_field.id}": None,
+        },
+    )
+    RowHandler().create_row(
+        user=user,
+        table=table,
+        values={
+            f"field_{text_field.id}": "Row 2",
+            f"field_{multiple_select_field.id}": [],
+            f"field_{single_select_field.id}": ss_option_1.id,
+        },
+    )
+    RowHandler().create_row(
+        user=user,
+        table=table,
+        values={
+            f"field_{text_field.id}": "Row 3",
+            f"field_{multiple_select_field.id}": [ms_option_1.id],
+            f"field_{single_select_field.id}": ss_option_1.id,
+        },
+    )
+    RowHandler().create_row(
+        user=user,
+        table=table,
+        values={
+            f"field_{text_field.id}": "Row 4",
+            f"field_{multiple_select_field.id}": [ms_option_1.id],
+            f"field_{single_select_field.id}": ss_option_2.id,
+        },
+    )
+    RowHandler().create_row(
+        user=user,
+        table=table,
+        values={
+            f"field_{text_field.id}": "Row 5",
+            f"field_{multiple_select_field.id}": [ms_option_2.id],
+            f"field_{single_select_field.id}": ss_option_2.id,
+        },
+    )
+    RowHandler().create_row(
+        user=user,
+        table=table,
+        values={
+            f"field_{text_field.id}": "Row 6",
+            f"field_{multiple_select_field.id}": [ms_option_2.id],
+        },
+    )
+    RowHandler().create_row(
+        user=user,
+        table=table,
+        values={
+            f"field_{text_field.id}": "Row 7",
+            f"field_{multiple_select_field.id}": [
+                ms_option_1.id,
+                ms_option_2.id,
+            ],
+        },
+    )
+    RowHandler().create_row(
+        user=user,
+        table=table,
+        values={
+            f"field_{text_field.id}": "Row 8",
+            f"field_{multiple_select_field.id}": [
+                ms_option_1.id,
+                ms_option_2.id,
+            ],
+        },
+    )
+    RowHandler().create_row(
+        user=user,
+        table=table,
+        values={
+            f"field_{text_field.id}": "Row 9",
+            f"field_{multiple_select_field.id}": [
+                ms_option_2.id,
+                ms_option_1.id,
+            ],
+        },
+    )
+
+    model = table.get_model()
+
+    queryset = model.objects.all().enhance_by_fields()
+    rows = list(queryset)
+
+    handler = ViewHandler()
+    counts = handler.get_group_by_metadata_in_rows(
+        [multiple_select_field, single_select_field], rows, queryset
+    )
+
+    # Resolve the queryset, so that we can do a comparison.
+    for c in counts.keys():
+        counts[c] = list(counts[c])
+
+    assert counts == {
+        multiple_select_field: unordered(
+            [
+                {"count": 2, f"field_{multiple_select_field.id}": []},
+                {
+                    "count": 2,
+                    f"field_{multiple_select_field.id}": [ms_option_1.id],
+                },
+                {
+                    "count": 2,
+                    f"field_{multiple_select_field.id}": [
+                        ms_option_1.id,
+                        ms_option_2.id,
+                    ],
+                },
+                {
+                    "count": 2,
+                    f"field_{multiple_select_field.id}": [ms_option_2.id],
+                },
+                {
+                    "count": 1,
+                    f"field_{multiple_select_field.id}": [
+                        ms_option_2.id,
+                        ms_option_1.id,
+                    ],
+                },
+            ]
+        ),
+        single_select_field: unordered(
+            [
+                {
+                    f"field_{single_select_field.id}": ss_option_1.id,
+                    f"field_{multiple_select_field.id}": [ms_option_1.id],
+                    "count": 1,
+                },
+                {
+                    f"field_{single_select_field.id}": ss_option_1.id,
+                    f"field_{multiple_select_field.id}": [],
+                    "count": 1,
+                },
+                {
+                    f"field_{single_select_field.id}": ss_option_2.id,
+                    f"field_{multiple_select_field.id}": [ms_option_1.id],
+                    "count": 1,
+                },
+                {
+                    f"field_{single_select_field.id}": ss_option_2.id,
+                    f"field_{multiple_select_field.id}": [ms_option_2.id],
+                    "count": 1,
+                },
+                {
+                    f"field_{single_select_field.id}": None,
+                    f"field_{multiple_select_field.id}": [
+                        ms_option_1.id,
+                        ms_option_2.id,
+                    ],
+                    "count": 2,
+                },
+                {
+                    f"field_{single_select_field.id}": None,
+                    f"field_{multiple_select_field.id}": [ms_option_2.id],
+                    "count": 1,
+                },
+                {
+                    f"field_{single_select_field.id}": None,
+                    f"field_{multiple_select_field.id}": [
+                        ms_option_2.id,
+                        ms_option_1.id,
+                    ],
+                    "count": 1,
+                },
+                {
+                    f"field_{single_select_field.id}": None,
+                    f"field_{multiple_select_field.id}": [],
                     "count": 1,
                 },
             ]

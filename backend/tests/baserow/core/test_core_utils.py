@@ -3,6 +3,7 @@ from io import BytesIO
 from unittest.mock import MagicMock, patch
 
 from django.db import OperationalError
+from django.test.utils import override_settings
 
 import pytest
 
@@ -20,6 +21,7 @@ from baserow.core.utils import (
     extract_allowed,
     find_intermediate_order,
     find_unused_name,
+    get_baserow_saas_base_url,
     get_value_at_path,
     grouper,
     random_string,
@@ -509,6 +511,8 @@ def obj():
             {"nested": [{"a": 1}, {"a": 2}]},
             {"nested": [{"a": 3}]},
         ],
+        "b": ["1", "2", "3"],
+        "empty_list": [],
     }
 
 
@@ -532,6 +536,8 @@ def obj():
                     {"nested": [{"a": 1}, {"a": 2}]},
                     {"nested": [{"a": 3}]},
                 ],
+                "b": ["1", "2", "3"],
+                "empty_list": [],
             },
         ),
         ("a.b", {"c": 123}),
@@ -545,6 +551,12 @@ def obj():
         ("nested[*].nested[*].a", [[1, 2], [3]]),
         ("nested.*.nested.0.a", [1, 3]),
         ("nested.*.nested.1.a", [2]),
+        ["b", ["1", "2", "3"]],
+        ["b.*", ["1", "2", "3"]],
+        ["b.0", "1"],
+        ["empty_list", []],
+        ["empty_list.*", []],
+        ["empty_list.*.0", None],
     ],
 )
 def test_get_value_at_path(obj, path, expected_result):
@@ -615,3 +627,16 @@ def test_safe_sample_payloads(input):
 @pytest.mark.parametrize("input", [1, 2, True])
 def test_safe_nonstr_sample_payloads(input):
     assert escape_csv_cell(input) == input
+
+
+@override_settings(DEBUG=False)
+def test_get_baserow_saas_base_url_without_debug():
+    assert get_baserow_saas_base_url() == ("https://api.baserow.io", {})
+
+
+@override_settings(DEBUG=True)
+def test_get_baserow_saas_base_url_with_debug():
+    assert get_baserow_saas_base_url() == (
+        "http://baserow-saas-backend:8000",
+        {"Host": "localhost"},
+    )

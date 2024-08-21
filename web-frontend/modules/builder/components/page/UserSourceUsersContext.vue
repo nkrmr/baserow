@@ -50,7 +50,7 @@
             >
               <a class="select__item-link">
                 <Presentation
-                  :title="user.username || $t('userSourceUsersContext.unnamed')"
+                  :title="getUserTitle(user, userSource.name)"
                   :subtitle="user.email || $t('userSourceUsersContext.noEmail')"
                   size="medium"
                   :initials="
@@ -70,10 +70,11 @@
 
 <script>
 import context from '@baserow/modules/core/mixins/context'
-import { mapActions, mapGetters } from 'vuex'
+import { mapActions } from 'vuex'
 import UserSourceService from '@baserow/modules/core/services/userSource'
 import { notifyIf } from '@baserow/modules/core/utils/error'
 import _ from 'lodash'
+import { DEFAULT_USER_ROLE_PREFIX } from '@baserow/modules/builder/constants'
 
 export default {
   name: 'UserSourceUsersContext',
@@ -88,10 +89,12 @@ export default {
     }
   },
   computed: {
-    ...mapGetters({
-      loggedUser: 'userSourceUser/getUser',
-      isAuthenticated: 'userSourceUser/isAuthenticated',
-    }),
+    isAuthenticated() {
+      return this.$store.getters['userSourceUser/isAuthenticated'](this.builder)
+    },
+    loggedUser() {
+      return this.$store.getters['userSourceUser/getUser'](this.builder)
+    },
     userSources() {
       return this.$store.getters['userSource/getUserSources'](this.builder)
     },
@@ -100,12 +103,58 @@ export default {
     search(newVal) {
       this.debouncedSearchUpdate(this, newVal)
     },
+    /**
+     * If the userSource changes, we want to ensure the User Roles in the
+     * selector are still valid.
+     */
+    userSources: {
+      handler() {
+        this.refreshUserRoles()
+      },
+      deep: true,
+    },
   },
   methods: {
     ...mapActions({
       actionForceAuthenticate: 'userSourceUser/forceAuthenticate',
       actionLogoff: 'userSourceUser/logoff',
     }),
+
+    /**
+     * When called, the authentication is forced which causes the
+     * token to be refreshed. Since the user's role is in the token,
+     * re-authenticating will cause the user's role to be also updated
+     * in the context.
+     */
+    async refreshUserRoles() {
+      if (!this.currentUser) {
+        await this.actionLogoff({ application: this.builder })
+      } else {
+        const userSource = this.$store.getters['userSource/getUserSourceById'](
+          this.builder,
+          this.currentUser.user_source_id
+        )
+        await this.actionForceAuthenticate({
+          application: this.builder,
+          userSource,
+          user: this.currentUser,
+        })
+      }
+    },
+
+    getUserTitle(user, userSourceName) {
+      const username =
+        user.username || this.$t('userSourceUsersContext.unnamed')
+      if (user.role.startsWith(DEFAULT_USER_ROLE_PREFIX)) {
+        return this.$t('userSelector.member', {
+          prefix: `${username} - ${userSourceName}`,
+        })
+      } else if (!user.role.trim().length) {
+        return `${username} - ${this.$t('visibilityForm.noRole')}`
+      } else {
+        return `${username} - ${user.role}`
+      }
+    },
 
     async shown() {
       if (this.userSources.length === 0) {
@@ -143,12 +192,16 @@ export default {
       this.currentUser = user
       try {
         if (!user) {
-          await this.actionLogoff()
+          await this.actionLogoff({ application: this.builder })
         } else {
           const userSource = this.$store.getters[
             'userSource/getUserSourceById'
           ](this.builder, user.user_source_id)
-          await this.actionForceAuthenticate({ userSource, user })
+          await this.actionForceAuthenticate({
+            application: this.builder,
+            userSource,
+            user,
+          })
         }
       } catch {
         this.currentUser = previousUser

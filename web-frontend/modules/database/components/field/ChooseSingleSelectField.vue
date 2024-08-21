@@ -6,25 +6,27 @@
     <div v-else class="warning">
       {{ $t('chooseSingleSelectField.warningWhenNothingToChooseOrCreate') }}
     </div>
-    <Radio
-      v-for="field in singleSelectFields"
-      :key="field.id"
-      :value="field.id"
+
+    <RadioGroup
       :model-value="value"
-      :loading="loading && field.id === value"
+      vertical-layout
+      :options="singleSelectFieldsOptions"
       :disabled="loading || readOnly"
       @input="$emit('input', $event)"
-      >{{ field.name }}</Radio
     >
+    </RadioGroup>
+
     <div v-if="canCreateSingleSelectField" class="margin-top-2">
-      <a
-        ref="createFieldContextLink"
-        class="choose-select-field__link margin-right-auto"
-        @click="$refs.createFieldContext.toggle($refs.createFieldContextLink)"
+      <span ref="createFieldContextLink">
+        <ButtonText
+          icon="iconoir-plus"
+          class="choose-select-field__link margin-right-auto"
+          @click="$refs.createFieldContext.toggle($refs.createFieldContextLink)"
+        >
+          {{ $t('chooseSingleSelectField.addSelectField') }}
+        </ButtonText></span
       >
-        <i class="choose-select-field__link-icon iconoir-plus"></i>
-        {{ $t('chooseSingleSelectField.addSelectField') }}
-      </a>
+
       <CreateFieldContext
         ref="createFieldContext"
         :table="table"
@@ -79,6 +81,7 @@ export default {
       default: false,
     },
   },
+
   computed: {
     canCreateSingleSelectField() {
       return (
@@ -97,6 +100,22 @@ export default {
       return this.fields.filter(
         (field) => field.type === this.singleSelectFieldType
       )
+    },
+    singleSelectFieldsOptions() {
+      return this.singleSelectFields.map((singleSelectField) => {
+        return {
+          label: singleSelectField.name,
+          value: singleSelectField.id,
+        }
+      })
+    },
+  },
+  watch: {
+    loading(isLoading) {
+      if (isLoading)
+        this.singleSelectFieldsOptions.find(
+          (option) => option.value === this.value
+        ).loading = true
     },
   },
 }

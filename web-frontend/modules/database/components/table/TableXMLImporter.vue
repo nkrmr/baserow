@@ -2,7 +2,7 @@
   <div>
     <div class="control">
       <template v-if="filename === ''">
-        <label class="control__label">{{
+        <label class="control__label control__label--small">{{
           $t('tableXMLImporter.fileLabel')
         }}</label>
         <div class="control__description">
@@ -35,14 +35,16 @@
             accept=".xml"
             @change="select($event)"
           />
-          <a
-            class="button button--large button--ghost file-upload__button"
-            :class="{ 'button--loading': state !== null }"
+          <Button
+            type="upload"
+            size="large"
+            class="file-upload__button"
+            :loading="state !== null"
+            icon="iconoir-cloud-upload"
             @click.prevent="$refs.file.click($event)"
           >
-            <i class="iconoir-cloud-upload"></i>
             {{ $t('tableXMLImporter.chooseButton') }}
-          </a>
+          </Button>
           <div v-if="state === null" class="file-upload__file">
             {{ filename }}
           </div>
@@ -57,7 +59,7 @@
           </template>
         </div>
         <div v-if="$v.filename.$error" class="error">
-          {{ $t('error.fieldRequired') }}
+          {{ $t('error.requiredField') }}
         </div>
       </div>
     </div>

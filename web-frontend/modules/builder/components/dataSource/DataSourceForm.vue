@@ -10,7 +10,7 @@
         <Dropdown
           v-model="values.type"
           fixed-items
-          class="data-source-form__type-dropdown"
+          class="dropdown--small data-source-form__type-dropdown"
           :placeholder="$t('dataSourceForm.servicePlaceholder')"
         >
           <template
@@ -33,8 +33,9 @@
           :integrations="integrations"
           :disabled="!values.type"
           :integration-type="serviceType?.integrationType"
+          small
         />
-        <Button icon="iconoir-bin" type="light" @click="$emit('delete')" />
+        <ButtonIcon icon="iconoir-bin" @click="$emit('delete')" />
       </div>
       <div v-if="headerError" class="error">
         {{ headerError }}

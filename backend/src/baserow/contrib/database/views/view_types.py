@@ -304,12 +304,22 @@ class GridViewType(ViewType):
         view: GridView,
         field_ids_to_check: Optional[List[int]] = None,
     ) -> Set[int]:
-        field_options = [o for o in view.gridviewfieldoptions_set.all() if o.hidden]
-        if field_ids_to_check is not None:
-            field_options = [
-                o for o in field_options if o.field_id in field_ids_to_check
-            ]
-        return {o.field_id for o in field_options}
+        if field_ids_to_check is None:
+            field_ids_to_check = view.table.field_set.values_list("id", flat=True)
+
+        fields_with_options = view.gridviewfieldoptions_set.all()
+        field_ids_with_options = {o.field_id for o in fields_with_options}
+        hidden_field_ids = {o.field_id for o in fields_with_options if o.hidden}
+        # Hide fields in shared views by default if they don't have field_options.
+        if view.public:
+            additional_hidden_field_ids = {
+                f_id
+                for f_id in field_ids_to_check
+                if f_id not in field_ids_with_options
+            }
+            hidden_field_ids |= additional_hidden_field_ids
+
+        return hidden_field_ids
 
     def enhance_queryset(self, queryset):
         return queryset.prefetch_related("gridviewfieldoptions_set")
@@ -608,10 +618,21 @@ class FormViewType(ViewType):
 
         return field_options
 
-    def _prepare_new_condition_group(self, updated_field_option_instance, group):
+    def _prepare_new_condition_group(
+        self, updated_field_option_instance, group, existing_condition_group_ids
+    ):
+        parent_group_id = group.get("parent_group", None)
+        if (
+            parent_group_id is not None
+            and parent_group_id not in existing_condition_group_ids
+        ):
+            raise FormViewFieldOptionsConditionGroupDoesNotExist(
+                "Invalid parent filter group id."
+            )
         return FormViewFieldOptionsConditionGroup(
             field_option=updated_field_option_instance,
             filter_type=group["filter_type"],
+            parent_group_id=group.get("parent_group", None),
         )
 
     def _group_exists_and_matches_field(self, existing_group, numeric_field_id):
@@ -639,7 +660,8 @@ class FormViewType(ViewType):
         groups_to_create_temp_ids = []
         groups_to_create = []
         groups_to_update = []
-        group_ids_to_delete = set(existing_condition_groups.keys())
+        existing_condition_group_ids = set(existing_condition_groups.keys())
+        group_ids_to_delete = existing_condition_group_ids.copy()
 
         for field_id, options in field_options.items():
             if "condition_groups" not in options:
@@ -652,15 +674,26 @@ class FormViewType(ViewType):
 
             for group in options["condition_groups"]:
                 existing_group = existing_condition_groups.get(group["id"], None)
+
+                parent_group_id = group.get("parent_group", None)
+                if (
+                    parent_group_id is not None
+                    and parent_group_id in group_ids_to_delete
+                ):
+                    group_ids_to_delete.remove(parent_group_id)
+
                 if self._group_exists_and_matches_field(
                     existing_group, numeric_field_id
                 ):
                     existing_group.filter_type = group["filter_type"]
                     groups_to_update.append(existing_group)
                     group_ids_to_delete.remove(existing_group.id)
+
                 else:
                     new_condition_group = self._prepare_new_condition_group(
-                        updated_field_option_instance, group
+                        updated_field_option_instance,
+                        group,
+                        existing_condition_group_ids,
                     )
                     groups_to_create_temp_ids.append(group["id"])
                     groups_to_create.append(new_condition_group)
@@ -922,7 +955,11 @@ class FormViewType(ViewType):
         # Delete all groups that have no conditions anymore.
         FormViewFieldOptionsConditionGroup.objects.filter(
             field_option__in=updated_field_options
-        ).annotate(count=Count("conditions")).filter(count=0).delete()
+        ).annotate(
+            count=Count("conditions") + Count("formviewfieldoptionsconditiongroup")
+        ).filter(
+            count=0
+        ).delete()
 
     def export_serialized(
         self,
@@ -1151,3 +1188,10 @@ class FormViewType(ViewType):
 
     def enhance_field_options_queryset(self, queryset):
         return queryset.prefetch_related("conditions", "condition_groups")
+
+    def prepare_field_options(
+        self, view: FormView, field_id: int
+    ) -> FormViewFieldOptions:
+        return FormViewFieldOptions(
+            field_id=field_id, form_view_id=view.id, enabled=False
+        )

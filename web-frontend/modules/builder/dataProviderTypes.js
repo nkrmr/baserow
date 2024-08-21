@@ -3,6 +3,8 @@ import { DataProviderType } from '@baserow/modules/core/dataProviderTypes'
 import { getValueAtPath } from '@baserow/modules/core/utils/object'
 
 import { defaultValueForParameterType } from '@baserow/modules/builder/utils/params'
+import { DEFAULT_USER_ROLE_PREFIX } from '@baserow/modules/builder/constants'
+import { PAGE_PARAM_TYPE_VALIDATION_FUNCTIONS } from '@baserow/modules/builder/enums'
 
 export class DataSourceDataProviderType extends DataProviderType {
   constructor(...args) {
@@ -47,8 +49,7 @@ export class DataSourceDataProviderType extends DataProviderType {
     ](applicationContext.page, parseInt(dataSourceId))
 
     const content = this.getDataSourceContent(applicationContext, dataSource)
-    const result = content ? getValueAtPath(content, rest.join('.')) : null
-    return result
+    return content ? getValueAtPath(content, rest.join('.')) : null
   }
 
   getDataSourceContent(applicationContext, dataSource) {
@@ -98,13 +99,15 @@ export class DataSourceDataProviderType extends DataProviderType {
       this.app.store.getters['dataSource/getPageDataSources'](page)
 
     const dataSourcesSchema = Object.fromEntries(
-      dataSources.map((dataSource) => {
-        const dsSchema = this.getDataSourceSchema(dataSource)
-        if (dsSchema) {
-          delete dsSchema.$schema
-        }
-        return [dataSource.id, dsSchema]
-      })
+      dataSources
+        .map((dataSource) => {
+          const dsSchema = this.getDataSourceSchema(dataSource)
+          if (dsSchema) {
+            delete dsSchema.$schema
+          }
+          return [dataSource.id, dsSchema]
+        })
+        .filter(([, schema]) => schema)
     )
 
     return { type: 'object', properties: dataSourcesSchema }
@@ -119,6 +122,68 @@ export class DataSourceDataProviderType extends DataProviderType {
           page,
           dataSourceId
         )?.name || `data_source_${dataSourceId}`
+      )
+    }
+    return super.getPathTitle(applicationContext, pathParts)
+  }
+}
+
+export class DataSourceContextDataProviderType extends DataProviderType {
+  static getType() {
+    return 'data_source_context'
+  }
+
+  get name() {
+    return this.app.i18n.t('dataProviderType.dataSourceContext')
+  }
+
+  getDataChunk({ page }, path) {
+    const [dataSourceId, ...rest] = path
+
+    const dataSource = this.app.store.getters[
+      'dataSource/getPageDataSourceById'
+    ](page, parseInt(dataSourceId))
+
+    return getValueAtPath(dataSource.context_data, rest.join('.'))
+  }
+
+  getDataContent({ page }) {
+    const dataSources =
+      this.app.store.getters['dataSource/getPageDataSources'](page)
+
+    return Object.fromEntries(
+      dataSources.map((dataSource) => [dataSource.id, dataSource.context_data])
+    )
+  }
+
+  getDataSchema({ page }) {
+    const dataSources =
+      this.app.store.getters['dataSource/getPageDataSources'](page)
+
+    const contextDataSchema = Object.fromEntries(
+      dataSources
+        .filter((dataSource) => dataSource?.type)
+        .map((dataSource) => [
+          dataSource.id,
+          this.app.$registry
+            .get('service', dataSource.type)
+            .getContextDataSchema(dataSource),
+        ])
+        .filter(([, schema]) => schema)
+    )
+
+    return { type: 'object', properties: contextDataSchema }
+  }
+
+  getPathTitle(applicationContext, pathParts) {
+    if (pathParts.length === 2) {
+      const page = applicationContext?.page
+      const dataSourceId = parseInt(pathParts[1])
+      return (
+        this.app.store.getters['dataSource/getPageDataSourceById'](
+          page,
+          dataSourceId
+        )?.name || `data_source_context_${dataSourceId}`
       )
     }
     return super.getPathTitle(applicationContext, pathParts)
@@ -148,13 +213,15 @@ export class PageParameterDataProviderType extends DataProviderType {
         )
       )
     } else {
-      // Read parameters from the application context
+      // Read parameters value from the application context
       await Promise.all(
-        Object.entries(pageParamsValue).map(([name, value]) =>
+        page.path_params.map(({ name, type }) =>
           this.app.store.dispatch('pageParameter/setParameter', {
             page,
             name,
-            value,
+            value: PAGE_PARAM_TYPE_VALIDATION_FUNCTIONS[type](
+              pageParamsValue[name]
+            ),
           })
         )
       )
@@ -213,6 +280,26 @@ export class CurrentRecordDataProviderType extends DataProviderType {
     return true
   }
 
+  getFirstCollectionAncestor(page, element) {
+    if (!element) {
+      return null
+    }
+    const elementType = this.app.$registry.get('element', element.type)
+    if (elementType.isCollectionElement) {
+      return element
+    }
+    const ancestors = this.app.store.getters['element/getAncestors'](
+      page,
+      element
+    )
+    for (const ancestor of ancestors) {
+      const ancestorType = this.app.$registry.get('element', ancestor.type)
+      if (ancestorType.isCollectionElement) {
+        return ancestor
+      }
+    }
+  }
+
   // Loads all element contents
   async init(applicationContext) {
     const { page } = applicationContext
@@ -252,20 +339,26 @@ export class CurrentRecordDataProviderType extends DataProviderType {
     )
   }
 
+  getActionDispatchContext(applicationContext) {
+    return applicationContext.recordIndex
+  }
+
   getDataChunk(applicationContext, path) {
     const content = this.getDataContent(applicationContext)
     return getValueAtPath(content, path.join('.'))
   }
 
   getDataContent(applicationContext) {
-    const { element, recordIndex = 0 } = applicationContext
-
-    if (!element) {
+    const { page, element, recordIndex = 0 } = applicationContext
+    const collectionElement = this.getFirstCollectionAncestor(page, element)
+    if (!collectionElement) {
       return []
     }
 
     const rows =
-      this.app.store.getters['elementContent/getElementContent'](element)
+      this.app.store.getters['elementContent/getElementContent'](
+        collectionElement
+      )
 
     const row = { [this.indexKey]: recordIndex, ...rows[recordIndex] }
 
@@ -284,10 +377,20 @@ export class CurrentRecordDataProviderType extends DataProviderType {
   }
 
   getDataSchema(applicationContext) {
-    const { page, element: { data_source_id: dataSourceId } = {} } =
-      applicationContext
+    // `collectionField` is set by any collection element using collection fields
+    // If we have a collection field in the application context, we are in
+    // the context of a collection field inside a collection element.
+    const { page, element, collectionField = null } = applicationContext
+    const collectionElement = this.getFirstCollectionAncestor(page, element)
+    const dataSourceId = collectionElement?.data_source_id
 
-    if (!dataSourceId) {
+    if (
+      // If the collection element doesn't have a data source configured
+      !dataSourceId ||
+      // Or if the collection element IS the current element and we are not in a
+      // collection field
+      (element.id === collectionElement.id && collectionField === null)
+    ) {
       return null
     }
 
@@ -312,8 +415,9 @@ export class CurrentRecordDataProviderType extends DataProviderType {
 
   getPathTitle(applicationContext, pathParts) {
     if (pathParts.length === 1) {
-      const { page, element: { data_source_id: dataSourceId } = {} } =
-        applicationContext
+      const { page, element } = applicationContext
+      const collectionElement = this.getFirstCollectionAncestor(page, element)
+      const dataSourceId = collectionElement?.data_source_id
 
       const dataSource = this.app.store.getters[
         'dataSource/getPageDataSourceById'
@@ -341,62 +445,109 @@ export class FormDataProviderType extends DataProviderType {
     return this.app.i18n.t('dataProviderType.formData')
   }
 
-  async init(applicationContext) {
-    const { page } = applicationContext
-    const elements = await this.app.store.getters['element/getElementsOrdered'](
-      page
-    )
-    const formElementTypes = Object.values(this.app.$registry.getAll('element'))
-      .filter((elementType) => elementType.isFormElement)
-      .map((elementType) => elementType.getType())
-    const formElements = elements.filter((element) =>
-      formElementTypes.includes(element.type)
-    )
-
-    return formElements.map((element) => {
-      const elementType = this.app.$registry.get('element', element.type)
-      const initialValue = elementType.getInitialFormDataValue(
-        element,
-        applicationContext
-      )
-      const payload = {
-        value: initialValue,
-        type: elementType.formDataType,
-        isValid: elementType.isValid(element, initialValue),
-      }
-      return this.app.store.dispatch('formData/setFormData', {
-        page,
-        payload,
-        elementId: element.id,
-      })
-    })
-  }
-
   getActionDispatchContext(applicationContext) {
     return this.getDataContent(applicationContext)
   }
 
+  /**
+   * Responsible for filtering down an array of page elements to only those that
+   * are form elements, and are in the same 'element namespace path' as one another.
+   * For example:
+   *
+   * - HeadingRoot (path=[])
+   *     * Can access `InputRoot`
+   *     * Can access `InputContainer`
+   * - InputRoot (path=[])
+   * - FormContainer (path=[])
+   *     - InputContainer (path=[])
+   * - RepeatA (path=[])
+   *     - InputOuter (path=[RepeatA.id])
+   *     - HeadingOuter (path=[RepeatA.id])
+   *         * Can access `InputOuter`
+   *         * Can access `InputRoot`
+   *         * Can access `InputContainer`
+   *     - RepeatB (path=[RepeatA.id])
+   *        - InputInner (path=[RepeatA.id, RepeatB.id])
+   *        - HeadingInner (path=[RepeatA.id, RepeatB.id])
+   *            * Can access `InputInner`
+   *            * Can access `InputOuter`
+   *            * Can access `InputRoot`
+   *            * Can access `InputContainer`
+   *
+   * @param {Object} applicationContext - The application context object.
+   * @param {Object} targetElement - The target element object.
+   * @returns {Array} The filtered array of form elements in the same namespace as the target.
+   */
+  formElementsInNamespacePath(applicationContext, targetElement) {
+    const { page } = applicationContext
+    const targetNamespacePath =
+      this.app.store.getters['element/getElementNamespacePath'](
+        targetElement
+      ).join('.')
+    const elements = this.app.store.getters['element/getElementsOrdered'](page)
+    return elements.filter((element) => {
+      const elementType = this.app.$registry.get('element', element.type)
+      if (!elementType.isFormElement) {
+        // We only want to find accessible *form elements*.
+        return false
+      }
+      const elementNamespacePath =
+        this.app.store.getters['element/getElementNamespacePath'](element).join(
+          '.'
+        )
+      return targetNamespacePath.startsWith(elementNamespacePath)
+    })
+  }
+
   getDataChunk(applicationContext, path) {
     const content = this.getDataContent(applicationContext)
-    return getValueAtPath(content, path.join('')).value
+    return getValueAtPath(content, path.join('.'))
   }
 
   getDataContent(applicationContext) {
-    return this.app.store.getters['formData/getFormData'](
+    const formData = this.app.store.getters['formData/getFormData'](
       applicationContext.page
+    )
+    const { element: targetElement, recordIndexPath } = applicationContext
+    const accessibleFormElements = this.formElementsInNamespacePath(
+      applicationContext,
+      targetElement
+    )
+    return Object.fromEntries(
+      accessibleFormElements.map((element) => {
+        let formEntry = {}
+        if (recordIndexPath !== undefined) {
+          const uniqueElementId = this.app.$registry
+            .get('element', element.type)
+            .uniqueElementId(element, recordIndexPath)
+          formEntry = getValueAtPath(formData, uniqueElementId)
+        } else {
+          // When `getDataContent` is called by `getNodes`, we won't have
+          // access to `recordIndexPath`, so we need to find the first *array*
+          // in the form data that corresponds to the element.
+          function _findActualValue(currentValue) {
+            if (Array.isArray(currentValue)) {
+              return _findActualValue(currentValue[0])
+            }
+            return currentValue
+          }
+          formEntry = _findActualValue(formData[element.id])
+        }
+        return [element.id, formEntry?.value]
+      })
     )
   }
 
   getDataSchema(applicationContext) {
-    const { page } = applicationContext
+    const { page, element: targetElement } = applicationContext
+    const accessibleFormElements = this.formElementsInNamespacePath(
+      applicationContext,
+      targetElement
+    )
     return {
       type: 'object',
       properties: Object.fromEntries(
-        Object.entries(page.formData || {}).map(([elementId, { type }]) => {
-          const element = this.app.store.getters['element/getElementById'](
-            page,
-            parseInt(elementId)
-          )
+        accessibleFormElements.map((element) => {
           const elementType = this.app.$registry.get('element', element.type)
           const name = elementType.getDisplayName(element, applicationContext)
           const order = this.app.store.getters['element/getElementPosition'](
@@ -404,11 +555,11 @@ export class FormDataProviderType extends DataProviderType {
             element
           )
           return [
-            elementId,
+            element.id,
             {
               title: name,
-              type,
               order,
+              ...elementType.getDataSchema(element),
             },
           ]
         })
@@ -475,7 +626,7 @@ export class PreviousActionDataProviderType extends DataProviderType {
 
     const previousActions = this.app.store.getters[
       'workflowAction/getElementPreviousWorkflowActions'
-    ](page, applicationContext.element.id, applicationContext.workflowAction.id)
+    ](page, applicationContext.element.id, applicationContext.workflowAction)
 
     const previousActionSchema = _.chain(previousActions)
       // Retrieve the associated schema for each action
@@ -545,21 +696,53 @@ export class UserDataProviderType extends DataProviderType {
   }
 
   getDataContent(applicationContext) {
-    return {
-      is_authenticated:
-        this.app.store.getters['userSourceUser/isAuthenticated'],
-      ...this.app.store.getters['userSourceUser/getUser'],
+    const loggedUser = this.app.store.getters['userSourceUser/getUser'](
+      applicationContext.builder
+    )
+
+    const context = {
+      is_authenticated: this.app.store.getters[
+        'userSourceUser/isAuthenticated'
+      ](applicationContext.builder),
+      ...loggedUser,
     }
+
+    if (context.role?.startsWith(DEFAULT_USER_ROLE_PREFIX)) {
+      const userSourceName = this.app.store.getters[
+        'userSource/getUserSourceById'
+      ](applicationContext.builder, loggedUser.user_source_id).name
+      context.role = this.app.i18n.t('visibilityForm.rolesAllMembersOf', {
+        name: userSourceName,
+      })
+    }
+
+    return context
   }
 
   getDataSchema(applicationContext) {
     return {
       type: 'object',
       properties: {
-        is_authenticated: { title: 'isAuthenticated', type: 'boolean' },
-        id: { type: 'number', title: 'id' },
-        email: { type: 'string', title: 'email' },
-        username: { type: 'string', title: 'username' },
+        is_authenticated: {
+          title: this.app.i18n.t('userDataProviderType.isAuthenticated'),
+          type: 'boolean',
+        },
+        id: {
+          type: 'number',
+          title: this.app.i18n.t('userDataProviderType.id'),
+        },
+        email: {
+          type: 'string',
+          title: this.app.i18n.t('userDataProviderType.email'),
+        },
+        username: {
+          type: 'string',
+          title: this.app.i18n.t('userDataProviderType.username'),
+        },
+        role: {
+          type: 'string',
+          title: this.app.i18n.t('userDataProviderType.role'),
+        },
       },
     }
   }

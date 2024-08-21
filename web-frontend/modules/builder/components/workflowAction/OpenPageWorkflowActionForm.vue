@@ -1,31 +1,21 @@
 <template>
   <form @submit.prevent="submit">
-    <ApplicationBuilderFormulaInputGroup
-      v-model="values.url"
-      small
-      small-label
-      :placeholder="$t('openPageWorkflowActionForm.urlPlaceholder')"
+    <LinkNavigationSelectionForm
+      :default-values="defaultValues"
       :data-providers-allowed="dataProvidersAllowed"
-      :label="$t('openPageWorkflowActionForm.urlLabel')"
+      @values-changed="emitChange($event)"
     />
   </form>
 </template>
 
 <script>
-import ApplicationBuilderFormulaInputGroup from '@baserow/modules/builder/components/ApplicationBuilderFormulaInputGroup'
+import LinkNavigationSelectionForm from '@baserow/modules/builder/components/elements/components/forms/general/LinkNavigationSelectionForm'
 import form from '@baserow/modules/core/mixins/form'
 
 export default {
   name: 'OpenPageWorkflowActionForm',
-  components: { ApplicationBuilderFormulaInputGroup },
+  components: { LinkNavigationSelectionForm },
   mixins: [form],
   inject: ['dataProvidersAllowed'],
-  data() {
-    return {
-      values: {
-        url: '',
-      },
-    }
-  },
 }
 </script>

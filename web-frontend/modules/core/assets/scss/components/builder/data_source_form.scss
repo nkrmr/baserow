@@ -50,7 +50,7 @@
     padding: 12px 0 6px 4px;
   }
 
-  .filters__value--with-after-input {
+  .filters__value--with-input-field {
     display: flex;
     align-items: center;
 
@@ -78,9 +78,11 @@
     .filters__value--formula-toggle {
       margin-left: auto;
       padding-left: 6px;
+      margin-bottom: 2px;
+      margin-right: 2px;
     }
 
-    .filters__value--formula-toggle--disabled {
+    .filters__value-formula-toggle--disabled {
       color: $color-neutral-400;
     }
   }

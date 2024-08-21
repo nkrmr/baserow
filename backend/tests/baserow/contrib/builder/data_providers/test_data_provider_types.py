@@ -7,6 +7,7 @@ import pytest
 
 from baserow.contrib.builder.data_providers.data_provider_types import (
     CurrentRecordDataProviderType,
+    DataSourceContextDataProviderType,
     DataSourceDataProviderType,
     FormDataProviderType,
     PageParameterDataProviderType,
@@ -22,8 +23,11 @@ from baserow.contrib.builder.data_sources.builder_dispatch_context import (
 )
 from baserow.contrib.builder.elements.handler import ElementHandler
 from baserow.contrib.builder.formula_importer import import_formula
+from baserow.contrib.builder.workflow_actions.models import EventTypes
+from baserow.contrib.database.fields.handler import FieldHandler
 from baserow.core.services.dispatch_context import DispatchContext
 from baserow.core.services.exceptions import ServiceImproperlyConfigured
+from baserow.core.user_sources.constants import DEFAULT_USER_ROLE_PREFIX
 from baserow.core.user_sources.user_source_user import UserSourceUser
 from baserow.core.utils import MirrorDict
 
@@ -71,14 +75,23 @@ def test_form_data_provider_get_data_chunk(mock_validate):
     form_data_provider = FormDataProviderType()
 
     fake_request = MagicMock()
-    fake_request.data = {"form_data": {"1": {"value": "hello"}}}
+    fake_request.data = {"form_data": {"1": "hello", "2": ["a", "b"]}}
 
     dispatch_context = BuilderDispatchContext(fake_request, None)
+    mock_validate.side_effect = lambda x, y, z: y
 
+    # A single valued form data
     assert form_data_provider.get_data_chunk(dispatch_context, ["1"]) == "hello"
+    # A multiple valued form data
+    assert form_data_provider.get_data_chunk(dispatch_context, ["2", "*"]) == ["a", "b"]
+    # A multiple valued form data at a specific index
+    assert form_data_provider.get_data_chunk(dispatch_context, ["2", "0"]) == "a"
+    # Paths longer than 2 are unsupported.
+    assert form_data_provider.get_data_chunk(dispatch_context, ["2", "*", "z"]) is None
+    # Unknown form data fields are None
+    assert form_data_provider.get_data_chunk(dispatch_context, ["3"]) is None
+    # Empty paths are None
     assert form_data_provider.get_data_chunk(dispatch_context, []) is None
-    assert form_data_provider.get_data_chunk(dispatch_context, ["1", "test"]) is None
-    assert form_data_provider.get_data_chunk(dispatch_context, ["test"]) is None
 
 
 @patch("baserow.contrib.builder.data_providers.data_provider_types.ElementHandler")
@@ -91,14 +104,17 @@ def test_form_data_provider_validate_data_chunk(mock_handler):
 
     form_data_provider = FormDataProviderType()
 
-    mock_element_type.is_valid.return_value = True
-    assert form_data_provider.validate_data_chunk("1", "horse") is None
+    mock_element_type.is_valid.return_value = "something"
+    assert form_data_provider.validate_data_chunk("1", "horse", {}) == "something"
 
-    mock_element_type.is_valid.return_value = False
+    def raise_exc(x, y, z):
+        raise FormDataProviderChunkInvalidException()
+
+    mock_element_type.is_valid.side_effect = raise_exc
     with pytest.raises(FormDataProviderChunkInvalidException) as exc:
-        assert form_data_provider.validate_data_chunk("1", 42)
+        assert form_data_provider.validate_data_chunk("1", 42, {})
 
-    assert exc.value.args[0] == "Form data 42 is invalid for its element."
+    assert exc.value.args[0].startswith("Provided value for form element with ID")
 
 
 @pytest.mark.django_db
@@ -635,6 +651,87 @@ def test_data_source_formula_import_missing_get_row_datasource(data_fixture):
 
 
 @pytest.mark.django_db
+def test_data_source_context_data_provider_get_data_chunk(data_fixture):
+    user = data_fixture.create_user()
+    table, fields, rows = data_fixture.build_table(
+        user=user, columns=[("Name", "text")], rows=[]
+    )
+    field_handler = FieldHandler()
+    field = field_handler.create_field(
+        user=user,
+        table=table,
+        type_name="single_select",
+        name="Category",
+        select_options=[
+            {
+                "value": "Bakery",
+                "color": "red",
+            },
+            {
+                "value": "Grocery",
+                "color": "green",
+            },
+        ],
+    )
+    builder = data_fixture.create_builder_application(user=user)
+    page = data_fixture.create_builder_page(user=user, builder=builder)
+    data_source = data_fixture.create_builder_local_baserow_get_row_data_source(
+        user=user,
+        page=page,
+        table=table,
+        row_id="",
+        name="Item",
+    )
+    data_source_context_provider = DataSourceContextDataProviderType()
+
+    fake_request = MagicMock()
+    fake_request.data = {
+        "data_source": {"page_id": page.id},
+        "page_parameter": {},
+    }
+    dispatch_context = BuilderDispatchContext(fake_request, page)
+
+    # For fields that are not single select, `get_data_chunk` returns an empty response
+    assert (
+        data_source_context_provider.get_data_chunk(
+            dispatch_context, [str(data_source.id), fields[0].db_column]
+        )
+        is None
+    )
+
+    # For single select fields, we should be able to select one/all of the options
+    assert (
+        data_source_context_provider.get_data_chunk(
+            dispatch_context, [str(data_source.id), field.db_column, "0", "value"]
+        )
+        == "Bakery"
+    )
+
+    assert data_source_context_provider.get_data_chunk(
+        dispatch_context, [str(data_source.id), field.db_column, "*", "value"]
+    ) == ["Bakery", "Grocery"]
+
+    assert data_source_context_provider.get_data_chunk(
+        dispatch_context, [str(data_source.id), field.db_column, "*", "color"]
+    ) == ["red", "green"]
+
+
+@pytest.mark.django_db
+def test_data_source_data_context_data_provider_import_path(data_fixture):
+    data_source = data_fixture.create_builder_local_baserow_get_row_data_source()
+    data_source_context_provider = DataSourceContextDataProviderType()
+
+    assert data_source_context_provider.import_path(["1"], {}) == ["1"]
+    assert data_source_context_provider.import_path(
+        ["1"], {"builder_data_sources": {1: 2}}
+    ) == ["2"]
+
+    assert data_source_context_provider.import_path(
+        ["1"], {"builder_data_sources": {1: data_source.id}}
+    ) == [str(data_source.id)]
+
+
+@pytest.mark.django_db
 def test_table_element_formula_migration_with_current_row_provider(data_fixture):
     user = data_fixture.create_user()
     table, fields, rows = data_fixture.build_table(
@@ -747,7 +844,7 @@ def test_user_data_provider_get_data_chunk(data_fixture):
     assert user_data_provider_type.get_data_chunk(dispatch_context, ["id"]) == 0
 
     fake_request.user_source_user = UserSourceUser(
-        None, None, 42, "username", "e@ma.il"
+        None, None, 42, "username", "e@ma.il", "foo_role"
     )
 
     assert user_data_provider_type.get_data_chunk(
@@ -757,6 +854,137 @@ def test_user_data_provider_get_data_chunk(data_fixture):
         user_data_provider_type.get_data_chunk(dispatch_context, ["email"]) == "e@ma.il"
     )
     assert user_data_provider_type.get_data_chunk(dispatch_context, ["id"]) == 42
+    assert (
+        user_data_provider_type.get_data_chunk(dispatch_context, ["role"]) == "foo_role"
+    )
+
+
+@pytest.mark.django_db
+def test_translate_default_user_role_returns_same_role(data_fixture):
+    """
+    Ensure the UserDataProviderType's get_data_chunk() method returns
+    the same User Role.
+
+    When the role is a non-Default User Role, the same role should be returned.
+    """
+
+    user = data_fixture.create_user()
+    page = data_fixture.create_builder_page(user=user)
+    user_data_provider_type = UserDataProviderType()
+
+    fake_request = MagicMock()
+    fake_request.data = {
+        "page_parameter": {},
+    }
+    fake_request.user_source_user = AnonymousUser()
+
+    dispatch_context = BuilderDispatchContext(fake_request, page)
+
+    user_role = "foo_role"
+    fake_request.user_source_user = UserSourceUser(
+        None, None, 42, "username", "e@ma.il", user_role
+    )
+
+    assert (
+        user_data_provider_type.get_data_chunk(dispatch_context, ["role"]) == user_role
+    )
+
+
+@pytest.mark.django_db
+def test_translate_default_user_role_returns_translated_role(data_fixture):
+    """
+    Ensure the UserDataProviderType's get_data_chunk() method returns
+    the translated Default User Role.
+    """
+
+    user = data_fixture.create_user()
+    page = data_fixture.create_builder_page(user=user)
+    user_source_name = "FooUserSource"
+    user_source = data_fixture.create_user_source_with_first_type(name=user_source_name)
+    default_user_source_name = f"{DEFAULT_USER_ROLE_PREFIX}{user_source.id}"
+
+    user_data_provider_type = UserDataProviderType()
+
+    fake_request = MagicMock()
+    fake_request.data = {
+        "page_parameter": {},
+    }
+
+    dispatch_context = BuilderDispatchContext(fake_request, page)
+    fake_request.user_source_user = UserSourceUser(
+        user_source, None, 42, "username", "e@ma.il", default_user_source_name
+    )
+
+    assert (
+        user_data_provider_type.get_data_chunk(dispatch_context, ["role"])
+        == f"{user_source_name} member"
+    )
+
+
+@pytest.mark.django_db
+def test_current_record_provider_get_data_chunk_without_record_index(data_fixture):
+    current_record_provider = CurrentRecordDataProviderType()
+
+    user, token = data_fixture.create_user_and_token()
+
+    fake_request = MagicMock()
+    fake_request.data = {}
+
+    builder = data_fixture.create_builder_application(user=user)
+    page = data_fixture.create_builder_page(user=user, builder=builder)
+    workflow_action = data_fixture.create_local_baserow_create_row_workflow_action(
+        page=page, event=EventTypes.CLICK, user=user
+    )
+
+    dispatch_context = BuilderDispatchContext(fake_request, page, workflow_action)
+    assert current_record_provider.get_data_chunk(dispatch_context, ["path"]) is None
+
+
+@pytest.mark.django_db
+def test_current_record_provider_get_data_chunk(data_fixture):
+    current_record_provider = CurrentRecordDataProviderType()
+
+    user, token = data_fixture.create_user_and_token()
+
+    fake_request = MagicMock()
+    fake_request.user = user
+    fake_request.data = {"current_record": 0}
+
+    table, fields, rows = data_fixture.build_table(
+        user=user,
+        columns=[
+            ("Animal", "text"),
+        ],
+        rows=[
+            ["Badger"],
+            ["Horse"],
+            ["Bison"],
+        ],
+    )
+    field = table.field_set.get(name="Animal")
+    builder = data_fixture.create_builder_application(user=user)
+    page = data_fixture.create_builder_page(user=user, builder=builder)
+
+    data_source = data_fixture.create_builder_local_baserow_list_rows_data_source(
+        page=page, table=table, integration_args={"authorized_user": user}
+    )
+    repeat_element = data_fixture.create_builder_repeat_element(
+        page=page, data_source=data_source
+    )
+    button_element = data_fixture.create_builder_button_element(
+        page=page, parent_element=repeat_element
+    )
+
+    workflow_action = data_fixture.create_local_baserow_create_row_workflow_action(
+        page=page, element=button_element, event=EventTypes.CLICK, user=user
+    )
+
+    dispatch_context = BuilderDispatchContext(fake_request, page, workflow_action)
+
+    assert (
+        current_record_provider.get_data_chunk(dispatch_context, [field.db_column])
+        == "Badger"
+    )
 
 
 @pytest.mark.django_db

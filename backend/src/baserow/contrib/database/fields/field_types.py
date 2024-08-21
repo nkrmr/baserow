@@ -22,6 +22,7 @@ from django.db.models import (
     Case,
     CharField,
     DateTimeField,
+    Exists,
     Expression,
     F,
     Func,
@@ -33,6 +34,7 @@ from django.db.models import (
     When,
     Window,
 )
+from django.db.models.fields.related import ManyToManyField
 from django.db.models.functions import Coalesce, RowNumber
 
 from dateutil import parser
@@ -62,11 +64,16 @@ from baserow.contrib.database.api.fields.serializers import (
     FileFieldRequestSerializer,
     FileFieldResponseSerializer,
     IntegerOrStringField,
+    LinkRowRequestSerializer,
     LinkRowValueSerializer,
     ListOrStringField,
     MustBeEmptyField,
     PasswordSerializer,
     SelectOptionSerializer,
+)
+from baserow.contrib.database.api.views.errors import (
+    ERROR_VIEW_DOES_NOT_EXIST,
+    ERROR_VIEW_NOT_IN_TABLE,
 )
 from baserow.contrib.database.db.functions import RandomUUID
 from baserow.contrib.database.export_serialized import DatabaseExportSerializedStructure
@@ -88,6 +95,8 @@ from baserow.contrib.database.models import Table
 from baserow.contrib.database.table.handler import TableHandler
 from baserow.contrib.database.types import SerializedRowHistoryFieldMetadata
 from baserow.contrib.database.validators import UnicodeRegexValidator
+from baserow.contrib.database.views.exceptions import ViewDoesNotExist, ViewNotInTable
+from baserow.contrib.database.views.models import OWNERSHIP_TYPE_COLLABORATIVE, View
 from baserow.core.db import (
     CombinedForeignKeyAndManyToManyMultipleFieldPrefetch,
     collate_expression,
@@ -110,7 +119,7 @@ from ..formula.types.formula_types import (
     BaserowFormulaSingleFileType,
 )
 from .constants import BASEROW_BOOLEAN_FIELD_TRUE_VALUES, UPSERT_OPTION_DICT_KEY
-from .deferred_field_fk_updater import DeferredFieldFkUpdater
+from .deferred_foreign_key_updater import DeferredForeignKeyUpdater
 from .dependencies.exceptions import (
     CircularFieldDependencyError,
     SelfReferenceFieldDependencyError,
@@ -200,6 +209,7 @@ from .utils.duration import (
     get_duration_search_expression,
     is_duration_format_conversion_lossy,
     prepare_duration_value_for_db,
+    text_value_sql_to_duration,
 )
 
 User = get_user_model()
@@ -209,7 +219,6 @@ if TYPE_CHECKING:
         FieldUpdateCollector,
     )
     from baserow.contrib.database.table.models import FieldObject, GeneratedTableModel
-    from baserow.contrib.database.views.models import View
 
 
 class CollationSortMixin:
@@ -531,7 +540,7 @@ class NumberFieldType(FieldType):
         kwargs["decimal_places"] = instance.number_decimal_places
 
         if not instance.number_negative:
-            kwargs["min_value"] = 0
+            kwargs["min_value"] = Decimal("0")
 
         return serializers.DecimalField(
             **{
@@ -1734,10 +1743,10 @@ class DurationFieldType(FieldType):
     serializer_field_names = ["duration_format"]
     _can_group_by = True
 
-    def get_model_field(self, instance, **kwargs):
+    def get_model_field(self, instance: DurationField, **kwargs):
         return DurationModelField(instance.duration_format, null=True)
 
-    def get_serializer_field(self, instance, **kwargs):
+    def get_serializer_field(self, instance: DurationField, **kwargs):
         return DurationFieldSerializer(
             **{
                 "required": False,
@@ -1747,41 +1756,47 @@ class DurationFieldType(FieldType):
             },
         )
 
-    def get_serializer_help_text(self, instance):
+    def get_serializer_help_text(self, instance: DurationField):
         return (
             "The provided value can be a string in one of the available formats "
             "or a number representing the duration in seconds. In any case, the "
             "value will be rounded to match the field's duration format."
         )
 
-    def prepare_value_for_db(self, instance, value):
+    def prepare_value_for_db(self, instance: DurationField, value):
         return prepare_duration_value_for_db(value, instance.duration_format)
 
     def get_search_expression(self, field: Field, queryset: QuerySet) -> Expression:
         return get_duration_search_expression(field)
 
-    def random_value(self, instance, fake, cache):
+    def random_value(self, instance: DurationField, fake, cache):
         random_seconds = fake.random.random() * 60 * 60 * 24
         # if we have days in the format, ensure the random value is picked accordingly
         if "d" in instance.duration_format:
             random_seconds *= 30
         return duration_value_to_timedelta(random_seconds, instance.duration_format)
 
-    def get_alter_column_prepare_old_value(self, connection, from_field, to_field):
+    def get_alter_column_prepare_old_value(
+        self, connection, from_field: DurationField, to_field: Field
+    ):
         to_field_type = field_type_registry.get_by_model(to_field)
         if to_field_type.type in (TextFieldType.type, LongTextFieldType.type):
             return f"p_in = {duration_value_sql_to_text(from_field)};"
         elif to_field_type.type == NumberFieldType.type:
             return "p_in = EXTRACT(EPOCH FROM CAST(p_in AS INTERVAL))::NUMERIC;"
 
-    def get_alter_column_prepare_new_value(self, connection, from_field, to_field):
+    def get_alter_column_prepare_new_value(
+        self, connection, from_field: Field, to_field: DurationField
+    ):
         from_field_type = field_type_registry.get_by_model(from_field)
 
         if from_field_type.type in (NumberFieldType.type, self.type):
             duration_format = to_field.duration_format
             sql_round_func = DURATION_FORMATS[duration_format]["sql_round_func"]
 
-            return f"p_in = {sql_round_func} * INTERVAL '1 second';"
+            return f"p_in = make_interval(secs=>{sql_round_func});"
+        elif from_field_type.type in (TextFieldType.type, LongTextFieldType.type):
+            return f"p_in = {text_value_sql_to_duration(to_field)}"
 
     def serialize_to_input_value(self, field: Field, value: any) -> any:
         return value.total_seconds()
@@ -1888,12 +1903,15 @@ class LinkRowFieldType(ManyToManyFieldTypeSerializeToInputValueMixin, FieldType)
         "link_row_related_field",
         "link_row_table",
         "link_row_relation_id",
+        "link_row_limit_selection_view_id",
+        "link_row_limit_selection_view",
     ]
     serializer_field_names = [
         "link_row_table_id",
         "link_row_related_field_id",
         "link_row_table",
         "link_row_related_field",
+        "link_row_limit_selection_view_id",
     ]
     serializer_field_overrides = {
         "link_row_table_id": serializers.IntegerField(
@@ -1916,11 +1934,18 @@ class LinkRowFieldType(ManyToManyFieldTypeSerializeToInputValueMixin, FieldType)
             required=False,
             help_text="(Deprecated) The id of the related field.",
         ),
+        "link_row_limit_selection_view_id": serializers.IntegerField(
+            required=False,
+            allow_null=True,
+            help_text="The ID of the view in the related table where row selection "
+            "must be limited to.",
+        ),
     }
     request_serializer_field_names = [
         "link_row_table_id",
         "link_row_table",
         "has_related_field",
+        "link_row_limit_selection_view_id",
     ]
     request_serializer_field_overrides = {
         "has_related_field": serializers.BooleanField(required=False),
@@ -1936,6 +1961,16 @@ class LinkRowFieldType(ManyToManyFieldTypeSerializeToInputValueMixin, FieldType)
             source="link_row_table.id",
             help_text="(Deprecated) The id of the linked table.",
         ),
+        "link_row_limit_selection_view_id": serializers.IntegerField(
+            required=False,
+            allow_null=True,
+            # The default value is `-1` because anything lower than 0 will be
+            # ignored. This allows clearing the value by providing `None`,
+            # but ignoring it if not provided.
+            default=-1,
+            help_text="The ID of the view in the related table where row selection "
+            "must be limited to.",
+        ),
     }
 
     api_exceptions_map = {
@@ -1943,6 +1978,8 @@ class LinkRowFieldType(ManyToManyFieldTypeSerializeToInputValueMixin, FieldType)
         LinkRowTableNotInSameDatabase: ERROR_LINK_ROW_TABLE_NOT_IN_SAME_DATABASE,
         IncompatiblePrimaryFieldTypeError: ERROR_INCOMPATIBLE_PRIMARY_FIELD_TYPE,
         SelfReferencingLinkRowCannotHaveRelatedField: ERROR_SELF_REFERENCING_LINK_ROW_CANNOT_HAVE_RELATED_FIELD,
+        ViewDoesNotExist: ERROR_VIEW_DOES_NOT_EXIST,
+        ViewNotInTable: ERROR_VIEW_NOT_IN_TABLE,
     }
     _can_order_by = False
     can_be_primary_field = False
@@ -2292,13 +2329,8 @@ class LinkRowFieldType(ManyToManyFieldTypeSerializeToInputValueMixin, FieldType)
         representing the related row ids.
         """
 
-        return ListOrStringField(
-            **{
-                "child": IntegerOrStringField(min_value=0),
-                "required": False,
-                **kwargs,
-            }
-        )
+        required = kwargs.pop("required", False)
+        return LinkRowRequestSerializer(required=required, **kwargs)
 
     def get_response_serializer_field(self, instance, **kwargs):
         """
@@ -2317,7 +2349,8 @@ class LinkRowFieldType(ManyToManyFieldTypeSerializeToInputValueMixin, FieldType)
             "This field accepts an `array` containing the ids or the names of the "
             "related rows. "
             "A name is the value of the primary key of the related row. "
-            "This field also accepts a string with names separated by a comma. "
+            "This field also accepts a string with names separated by a comma or an "
+            "array of row names. You can also provide a unique row Id."
             "The response contains a list of objects containing the `id` and "
             "the primary field's `value` as a string for display purposes."
         )
@@ -2393,6 +2426,11 @@ class LinkRowFieldType(ManyToManyFieldTypeSerializeToInputValueMixin, FieldType)
         from baserow.contrib.database.table.models import Table
 
         link_row_table_id = values.pop("link_row_table_id", None)
+        # If the value is not set, it will be equal to `-1`. This is to allow setting
+        # the value to `None`, to clear it.
+        link_row_limit_selection_view_id = values.pop(
+            "link_row_limit_selection_view_id", -1
+        )
 
         if link_row_table_id is None:
             link_row_table = values.pop("link_row_table", None)
@@ -2416,6 +2454,32 @@ class LinkRowFieldType(ManyToManyFieldTypeSerializeToInputValueMixin, FieldType)
                 context=table,
             )
             values["link_row_table"] = table
+
+        # If the value it not provided, it defaults to -1 in the API. This means it
+        # must be ignored. We're doing that because the value is clearable by
+        # providing `None`.
+        if link_row_limit_selection_view_id is None:
+            values["link_row_limit_selection_view"] = None
+        elif (
+            isinstance(link_row_limit_selection_view_id, int)
+            and link_row_limit_selection_view_id > -1
+        ):
+            from baserow.contrib.database.views.handler import ViewHandler
+            from baserow.contrib.database.views.registries import view_type_registry
+
+            view = ViewHandler().get_view(
+                link_row_limit_selection_view_id,
+                base_queryset=View.objects.filter(
+                    ownership_type=OWNERSHIP_TYPE_COLLABORATIVE
+                ),
+            )
+            view_type = view_type_registry.get_by_model(view.specific_class)
+            if not view_type.can_filter:
+                raise ViewDoesNotExist(
+                    f"The view with id {link_row_limit_selection_view_id} doesn't "
+                    f"support filters."
+                )
+            values["link_row_limit_selection_view"] = view
 
         return values
 
@@ -2442,6 +2506,10 @@ class LinkRowFieldType(ManyToManyFieldTypeSerializeToInputValueMixin, FieldType)
         """
 
         link_row_table = allowed_field_values.get("link_row_table")
+        link_row_limit_selection_view = allowed_field_values.get(
+            "link_row_limit_selection_view"
+        )
+
         if link_row_table is None:
             raise LinkRowTableNotProvided(
                 "The link_row_table argument must be provided when creating a link_row "
@@ -2453,6 +2521,12 @@ class LinkRowFieldType(ManyToManyFieldTypeSerializeToInputValueMixin, FieldType)
                 f"The link row table {link_row_table.id} is not in the same database "
                 f"as the table {table.id}."
             )
+
+        if (
+            link_row_limit_selection_view is not None
+            and link_row_limit_selection_view.table_id != link_row_table.id
+        ):
+            raise ViewNotInTable(link_row_limit_selection_view.id)
 
         CoreHandler().check_permissions(
             user,
@@ -2477,6 +2551,22 @@ class LinkRowFieldType(ManyToManyFieldTypeSerializeToInputValueMixin, FieldType)
         """
 
         link_row_table = to_field_values.get("link_row_table")
+
+        existing_or_new_table = to_field_values.get(
+            "link_row_table", getattr(from_field, "link_row_table", None)
+        )
+        existing_or_new_limit_selection_view = to_field_values.get(
+            "link_row_limit_selection_view",
+            getattr(from_field, "link_row_limit_selection_view", None),
+        )
+
+        if (
+            existing_or_new_limit_selection_view is not None
+            and existing_or_new_limit_selection_view.table_id
+            != existing_or_new_table.id
+        ):
+            raise ViewNotInTable(existing_or_new_limit_selection_view.id)
+
         if link_row_table is None:
             field_kwargs.setdefault(
                 "has_related_field", from_field.link_row_table_has_related_field
@@ -2725,6 +2815,9 @@ class LinkRowFieldType(ManyToManyFieldTypeSerializeToInputValueMixin, FieldType)
         serialized = super().export_serialized(field, False)
         serialized["link_row_table_id"] = field.link_row_table_id
         serialized["link_row_related_field_id"] = field.link_row_related_field_id
+        serialized[
+            "link_row_limit_selection_view_id"
+        ] = field.link_row_limit_selection_view_id
         serialized["has_related_field"] = field.link_row_table_has_related_field
         return serialized
 
@@ -2734,12 +2827,15 @@ class LinkRowFieldType(ManyToManyFieldTypeSerializeToInputValueMixin, FieldType)
         serialized_values: Dict[str, Any],
         import_export_config: ImportExportConfig,
         id_mapping: Dict[str, Any],
-        deferred_fk_update_collector: DeferredFieldFkUpdater,
+        deferred_fk_update_collector: DeferredForeignKeyUpdater,
     ) -> Optional[Field]:
         serialized_copy = serialized_values.copy()
         serialized_copy["link_row_table_id"] = id_mapping["database_tables"][
             serialized_copy["link_row_table_id"]
         ]
+        link_row_limit_selection_view_id = serialized_copy.pop(
+            "link_row_limit_selection_view_id", None
+        )
         link_row_related_field_id = serialized_copy.pop(
             "link_row_related_field_id", None
         )
@@ -2779,6 +2875,14 @@ class LinkRowFieldType(ManyToManyFieldTypeSerializeToInputValueMixin, FieldType)
             # set it right now.
             related_field.link_row_related_field_id = field.id
             related_field.save()
+
+        if link_row_limit_selection_view_id:
+            deferred_fk_update_collector.add_deferred_fk_to_update(
+                field,
+                "link_row_limit_selection_view_id",
+                link_row_limit_selection_view_id,
+                "database_views",
+            )
 
         return field
 
@@ -2966,6 +3070,24 @@ class LinkRowFieldType(ManyToManyFieldTypeSerializeToInputValueMixin, FieldType)
     def are_row_values_equal(self, value1: any, value2: any) -> bool:
         return set(value1) == set(value2)
 
+    def empty_query(
+        self,
+        field_name: str,
+        model_field: LinkRowField,
+        field: ManyToManyField,
+    ) -> Q:
+        # Exclude all the trashed rows in the related table.
+        subq = Subquery(
+            model_field.model.objects.filter(
+                id=OuterRef("id"), **{f"{field_name}__trashed": False}
+            )[:1]
+        )
+        annotation_name = f"{field_name}_exists"
+        return AnnotatedQ(
+            annotation={annotation_name: Exists(subq)},
+            q={f"{annotation_name}": False},
+        )
+
 
 class EmailFieldType(CollationSortMixin, CharFieldMatchingRegexFieldType):
     type = "email"
@@ -3120,14 +3242,9 @@ class FileFieldType(FieldType):
         return values_by_row
 
     def get_serializer_field(self, instance, **kwargs):
-        required = kwargs.get("required", False)
-        return serializers.ListSerializer(
-            **{
-                "child": FileFieldRequestSerializer(),
-                "required": required,
-                "allow_null": not required,
-                **kwargs,
-            }
+        required = kwargs.pop("required", False)
+        return FileFieldRequestSerializer(
+            required=required, allow_null=not required, **kwargs
         )
 
     def get_response_serializer_field(self, instance, **kwargs):
@@ -3906,7 +4023,8 @@ class MultipleSelectFieldType(
             "when getting or listing the field. "
             "You can also send a list of option names in which case the option are "
             "searched by name. The first one that matches is used. "
-            "This field also accepts a string with names separated by a comma. "
+            "This field also accepts a string with names separated by a comma or an "
+            "array of file names. "
             "The response represents chosen field, but also the value and "
             "color is exposed."
         )
@@ -4807,7 +4925,7 @@ class CountFieldType(FormulaFieldType):
         serialized_values: Dict[str, Any],
         import_export_config: ImportExportConfig,
         id_mapping: Dict[str, Any],
-        deferred_fk_update_collector: DeferredFieldFkUpdater,
+        deferred_fk_update_collector: DeferredForeignKeyUpdater,
     ) -> "Field":
         serialized_copy = serialized_values.copy()
         # We have to temporarily remove the `through_field_id`, because it can be
@@ -4822,7 +4940,7 @@ class CountFieldType(FormulaFieldType):
             deferred_fk_update_collector,
         )
         deferred_fk_update_collector.add_deferred_fk_to_update(
-            field, "through_field_id", original_through_field_id
+            field, "through_field_id", original_through_field_id, "database_fields"
         )
         return field
 
@@ -4958,7 +5076,7 @@ class RollupFieldType(FormulaFieldType):
         serialized_values: Dict[str, Any],
         import_export_config: ImportExportConfig,
         id_mapping: Dict[str, Any],
-        deferred_fk_update_collector: DeferredFieldFkUpdater,
+        deferred_fk_update_collector: DeferredForeignKeyUpdater,
     ) -> "Field":
         serialized_copy = serialized_values.copy()
         # We have to temporarily remove the `through_field_id` and `target_field_id`,
@@ -4974,10 +5092,10 @@ class RollupFieldType(FormulaFieldType):
             deferred_fk_update_collector,
         )
         deferred_fk_update_collector.add_deferred_fk_to_update(
-            field, "through_field_id", original_through_field_id
+            field, "through_field_id", original_through_field_id, "database_fields"
         )
         deferred_fk_update_collector.add_deferred_fk_to_update(
-            field, "target_field_id", original_target_field_id
+            field, "target_field_id", original_target_field_id, "database_fields"
         )
         return field
 
@@ -5199,7 +5317,7 @@ class LookupFieldType(FormulaFieldType):
         serialized_values: Dict[str, Any],
         import_export_config: ImportExportConfig,
         id_mapping: Dict[str, Any],
-        deferred_fk_update_collector: DeferredFieldFkUpdater,
+        deferred_fk_update_collector: DeferredForeignKeyUpdater,
     ) -> "Field":
         serialized_copy = serialized_values.copy()
         # We have to temporarily set the `through_field_id` and `target_field_id`,
@@ -5215,10 +5333,10 @@ class LookupFieldType(FormulaFieldType):
             deferred_fk_update_collector,
         )
         deferred_fk_update_collector.add_deferred_fk_to_update(
-            field, "through_field_id", original_through_field_id
+            field, "through_field_id", original_through_field_id, "database_fields"
         )
         deferred_fk_update_collector.add_deferred_fk_to_update(
-            field, "target_field_id", original_target_field_id
+            field, "target_field_id", original_target_field_id, "database_fields"
         )
         return field
 
@@ -5627,7 +5745,7 @@ class UUIDFieldType(ReadOnlyFieldType):
         return "" if value is None else str(value)
 
     def contains_query(self, *args):
-        return contains_filter(*args)
+        return contains_filter(*args, validate=False)
 
     def to_baserow_formula_expression(self, field):
         # Cast the uuid to text, to make it compatible with all the text related

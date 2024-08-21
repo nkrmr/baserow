@@ -5,7 +5,9 @@ from django.test.utils import CaptureQueriesContext
 import pytest
 from rest_framework.status import HTTP_200_OK
 
+from baserow.api.user_files.serializers import UserFileSerializer
 from baserow.contrib.builder.models import Builder
+from baserow.contrib.builder.theme.registries import theme_config_block_registry
 
 
 @pytest.mark.django_db
@@ -63,8 +65,12 @@ def test_list_builder_applications_equal_number_of_queries_n_builders(
     data_fixture.create_builder_application(workspace=workspace, order=1)
     data_fixture.create_builder_application(workspace=workspace, order=2)
 
-    # Force the `MainThemeConfigBlockType` to be created.
-    [builder.mainthemeconfigblock for builder in Builder.objects.all()]
+    # Force the `ThemeConfigBlockType` to be created.
+    for theme_config_block_type in theme_config_block_registry.get_all():
+        related_name = theme_config_block_type.related_name_in_builder_model
+        [
+            getattr(builder, related_name) for builder in Builder.objects.all()
+        ]  # noqa: W0106
 
     with CaptureQueriesContext(connection) as queries_request_1:
         response = api_client.get(
@@ -73,9 +79,12 @@ def test_list_builder_applications_equal_number_of_queries_n_builders(
         )
         assert response.status_code == HTTP_200_OK
 
-    # Force the `MainThemeConfigBlockType` to be created.
-    data_fixture.create_builder_application(workspace=workspace, order=2)
-    [builder.mainthemeconfigblock for builder in Builder.objects.all()]
+    # Force the `ThemeConfigBlockType` to be created.
+    for theme_config_block_type in theme_config_block_registry.get_all():
+        related_name = theme_config_block_type.related_name_in_builder_model
+        [
+            getattr(builder, related_name) for builder in Builder.objects.all()
+        ]  # noqa: W0106
 
     with CaptureQueriesContext(connection) as queries_request_2:
         response = api_client.get(
@@ -86,13 +95,8 @@ def test_list_builder_applications_equal_number_of_queries_n_builders(
 
     # The number of queries should not increase because another builder application
     # is added, with its own theme.
-
-    assert (
-        len(queries_request_1.captured_queries)
-        # The -2 queries are expected because that's another a
-        # savepoint + release savepoint. This is unrelated to the builder application
-        # specific code.
-        == len(queries_request_2.captured_queries) - 2
+    assert len(queries_request_1.captured_queries) == len(
+        queries_request_2.captured_queries
     )
 
 
@@ -109,8 +113,8 @@ def test_list_builder_applications_theme(
     )
     data_fixture.create_builder_application(workspace=workspace, order=2)
 
-    application_1.mainthemeconfigblock.primary_color = "#ccccccff"
-    application_1.mainthemeconfigblock.save()
+    application_1.colorthemeconfigblock.primary_color = "#ccccccff"
+    application_1.colorthemeconfigblock.save()
 
     url = reverse("api:applications:list", kwargs={"workspace_id": workspace.id})
 
@@ -120,28 +124,10 @@ def test_list_builder_applications_theme(
     )
     assert response.status_code == HTTP_200_OK
     response_json = response.json()
-    assert response_json[0]["theme"] == {
-        "primary_color": "#ccccccff",
-        "secondary_color": "#0eaa42ff",
-        "border_color": "#d7d8d9ff",
-        "heading_1_font_size": 24,
-        "heading_1_color": "#070810ff",
-        "heading_2_font_size": 20,
-        "heading_2_color": "#070810ff",
-        "heading_3_font_size": 16,
-        "heading_3_color": "#070810ff",
-    }
-    assert response_json[1]["theme"] == {
-        "primary_color": "#5190efff",
-        "secondary_color": "#0eaa42ff",
-        "border_color": "#d7d8d9ff",
-        "heading_1_font_size": 24,
-        "heading_1_color": "#070810ff",
-        "heading_2_font_size": 20,
-        "heading_2_color": "#070810ff",
-        "heading_3_font_size": 16,
-        "heading_3_color": "#070810ff",
-    }
+
+    assert response_json[0]["theme"]["primary_color"] == "#ccccccff"
+    assert response_json[0]["theme"]["secondary_color"] == "#0eaa42ff"
+    assert response_json[1]["theme"]["primary_color"] == "#5190efff"
 
 
 @pytest.mark.django_db
@@ -150,7 +136,12 @@ def test_get_builder_application(api_client, data_fixture):
         email="test@test.nl", password="password", first_name="Test1"
     )
     workspace = data_fixture.create_workspace(user=user)
-    application = data_fixture.create_builder_application(workspace=workspace, order=1)
+    favicon_file = data_fixture.create_user_file(original_extension=".png")
+    application = data_fixture.create_builder_application(
+        workspace=workspace,
+        order=1,
+        favicon_file=favicon_file,
+    )
 
     url = reverse("api:applications:item", kwargs={"application_id": application.id})
 
@@ -160,7 +151,13 @@ def test_get_builder_application(api_client, data_fixture):
     )
     assert response.status_code == HTTP_200_OK
     response_json = response.json()
+
+    # Check we have the theme but don't want to check every single property
+    assert response_json["theme"]["body_text_color"] == "#070810ff"
+    del response_json["theme"]
+
     assert response_json == {
+        "favicon_file": UserFileSerializer(application.favicon_file).data,
         "id": application.id,
         "name": application.name,
         "order": application.order,
@@ -176,17 +173,6 @@ def test_get_builder_application(api_client, data_fixture):
             "generative_ai_models_enabled": {},
         },
         "pages": [],
-        "theme": {
-            "primary_color": "#5190efff",
-            "secondary_color": "#0eaa42ff",
-            "border_color": "#d7d8d9ff",
-            "heading_1_font_size": 24,
-            "heading_1_color": "#070810ff",
-            "heading_2_font_size": 20,
-            "heading_2_color": "#070810ff",
-            "heading_3_font_size": 16,
-            "heading_3_color": "#070810ff",
-        },
     }
 
 
@@ -196,7 +182,12 @@ def test_list_builder_applications(api_client, data_fixture):
         email="test@test.nl", password="password", first_name="Test1"
     )
     workspace = data_fixture.create_workspace(user=user)
-    application = data_fixture.create_builder_application(workspace=workspace, order=1)
+    favicon_file = data_fixture.create_user_file(original_extension=".png")
+    application = data_fixture.create_builder_application(
+        workspace=workspace,
+        order=1,
+        favicon_file=favicon_file,
+    )
 
     url = reverse("api:applications:list", kwargs={"workspace_id": workspace.id})
 
@@ -206,8 +197,14 @@ def test_list_builder_applications(api_client, data_fixture):
     )
     assert response.status_code == HTTP_200_OK
     response_json = response.json()
+
+    # Check we have the theme but don't want to check every single property
+    assert response_json[0]["theme"]["body_text_color"] == "#070810ff"
+    del response_json[0]["theme"]
+
     assert response_json == [
         {
+            "favicon_file": UserFileSerializer(application.favicon_file).data,
             "id": application.id,
             "name": application.name,
             "order": application.order,
@@ -223,16 +220,5 @@ def test_list_builder_applications(api_client, data_fixture):
                 "generative_ai_models_enabled": {},
             },
             "pages": [],
-            "theme": {
-                "primary_color": "#5190efff",
-                "secondary_color": "#0eaa42ff",
-                "border_color": "#d7d8d9ff",
-                "heading_1_font_size": 24,
-                "heading_1_color": "#070810ff",
-                "heading_2_font_size": 20,
-                "heading_2_color": "#070810ff",
-                "heading_3_font_size": 16,
-                "heading_3_color": "#070810ff",
-            },
         }
     ]

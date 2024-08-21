@@ -94,6 +94,7 @@
               }"
               @mousedown="cardDown($event, slot.row)"
               @mousemove="cardMoveOver($event, slot.row)"
+              v-on="$listeners"
             ></RowCard>
           </div>
           <div v-if="error" class="margin-top-2">
@@ -105,7 +106,7 @@
         </template>
       </InfiniteScroll>
       <div class="kanban-view__stack-foot">
-        <a
+        <Button
           v-if="
             !readOnly &&
             $hasPermission(
@@ -114,13 +115,14 @@
               database.workspace.id
             )
           "
-          class="button button--ghost kanban-view__stack-new-button"
+          type="secondary"
+          icon="iconoir-plus"
+          full-width
           :disabled="draggingRow !== null"
           @click="!readOnly && $emit('create-row', { option })"
         >
-          <i class="iconoir-plus"></i>
           {{ $t('kanbanViewStack.new') }}
-        </a>
+        </Button>
       </div>
     </div>
     <!--
@@ -488,10 +490,10 @@ export default {
       this.autoScrollTimeout = null
     },
     updateBuffer() {
-      const el = this.$refs.scroll.$el
+      const scroll = this.$refs.scroll
       const cardHeight = this.cardHeight
-      const containerHeight = el.clientHeight
-      const scrollTop = el.scrollTop
+      const containerHeight = scroll.clientHeight()
+      const scrollTop = scroll.$el.scrollTop
       const min = Math.ceil(containerHeight / cardHeight) + 2
       const rows = this.stack.results.slice(
         Math.floor(scrollTop / cardHeight),

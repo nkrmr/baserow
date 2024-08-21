@@ -176,6 +176,13 @@ VALID_FORMULA_TESTS = [
         -366 * 24 * 3600,
     ),
     ("date_interval('1 year') - date_interval('1 day')", 364 * 24 * 3600),
+    ("date_interval('1 minute') * 2", 60 * 2),
+    ("3 * date_interval('1 minute')", 60 * 3),
+    ("date_interval('1 minute') / 2", 30),
+    ("date_interval('1 minute') / 0", None),
+    ("toseconds(date_interval('1 minute'))", "60"),
+    ("toseconds(toduration(60))", "60"),
+    ("toduration(1 / 0)", None),
     ("now() > todate('20200101', 'YYYYMMDD')", True),
     ("todate('01123456', 'DDMMYYYY') < now()", False),
     ("todate('01123456', 'DDMMYYYY') < today()", False),
@@ -593,7 +600,7 @@ def test_can_lookup_date_intervals(data_fixture, api_client):
     )
     assert response.status_code == HTTP_200_OK
     assert [o[lookup_formula.db_column] for o in response.json()["results"]] == [
-        [{"id": row_1.id, "value": 2 * 24 * 3600}]
+        [{"id": row_1.id, "value": 172800}],
     ]
 
 
@@ -1003,8 +1010,8 @@ INVALID_FORMULA_TESTS = [
         "ERROR_WITH_FORMULA",
         (
             "Error with formula: argument number 1 given to function sum was of type "
-            "number but the only usable type for this argument is a list of number "
-            "values obtained from a lookup."
+            "number but the only usable type for this argument is a list of number, or "
+            "duration values obtained from a lookup."
         ),
     ),
     (
@@ -1029,8 +1036,8 @@ INVALID_FORMULA_TESTS = [
         (
             "Error with formula: argument number 1 given to function sum was of type "
             "link "
-            "but the only usable type for this argument is a list of number values "
-            "obtained from a lookup."
+            "but the only usable type for this argument is a list of number, or "
+            "duration values obtained from a lookup."
         ),
     ),
     (
@@ -1605,6 +1612,8 @@ NULLABLE_FORMULA_TESTS = [
     ([{"type": "date", "name": "dt"}], "totext(field('dt'))", False),
     ([{"type": "date", "name": "dt"}], "field('dt') + date_interval('1d')", True),
     ([{"type": "date", "name": "dt"}], "field('dt') - date_interval('1d')", True),
+    ([], "date_interval('1d') / 2", True),
+    ([], "date_interval('1d') * 2", True),
     (
         [
             {"type": "date", "name": "dt"},
@@ -1690,3 +1699,107 @@ def test_nullable_formulas(data_fixture, fields, formula, nullable):
     )
     assert formula_field.error is None
     assert formula_field.nullable == nullable
+
+
+@pytest.mark.django_db
+def test_can_filter_in_aggregated_formulas(data_fixture):
+    user = data_fixture.create_user()
+    table_a, table_b, link_field = data_fixture.create_two_linked_tables(user=user)
+    boolean_field = data_fixture.create_boolean_field(table=table_b, name="check")
+    data_fixture.create_autonumber_field(
+        table=table_b,
+        name="autonr",
+    )
+
+    rows_b = RowHandler().create_rows(
+        user,
+        table_b,
+        [
+            {boolean_field.db_column: True},
+            {},
+            {boolean_field.db_column: True},
+            {},
+            {},
+            {boolean_field.db_column: True},
+            {},
+        ],
+    )
+
+    formula_field = data_fixture.create_formula_field(
+        user=user,
+        table=table_a,
+        formula=f"max(filter(lookup('link', 'autonr'), lookup('link', 'check')))",
+    )
+
+    row_a1, row_a2, row_a3 = RowHandler().create_rows(
+        user,
+        table_a,
+        [
+            {link_field.db_column: [rows_b[0].id, rows_b[1].id]},
+            {link_field.db_column: [rows_b[2].id, rows_b[3].id, rows_b[4].id]},
+            {link_field.db_column: [rows_b[4].id, rows_b[5].id, rows_b[6].id]},
+        ],
+    )
+
+    # autonr of row_b[0], because it's the only one with check=True
+    assert getattr(row_a1, formula_field.db_column) == 1
+    assert getattr(row_a2, formula_field.db_column) == 3  # autonr of row_b[2]
+    assert getattr(row_a3, formula_field.db_column) == 6  # autonr of row_b[5]
+
+
+@pytest.mark.django_db
+def test_can_filter_in_aggregated_formulas_with_multipleselects(data_fixture):
+    user = data_fixture.create_user()
+    table_a, table_b, link_field = data_fixture.create_two_linked_tables(user=user)
+    boolean_field = data_fixture.create_boolean_field(table=table_b, name="check")
+    multiple_select_field = data_fixture.create_multiple_select_field(
+        table=table_b, name="mm"
+    )
+    option_a = data_fixture.create_select_option(field=multiple_select_field, value="a")
+    option_b = data_fixture.create_select_option(field=multiple_select_field, value="b")
+    option_c = data_fixture.create_select_option(field=multiple_select_field, value="c")
+    option_d = data_fixture.create_select_option(field=multiple_select_field, value="d")
+
+    rows_b = RowHandler().create_rows(
+        user,
+        table_b,
+        [
+            {
+                boolean_field.db_column: True,
+                multiple_select_field.db_column: [option_a.id, option_b.id],
+            },
+            {multiple_select_field.db_column: [option_c.id]},
+            {
+                boolean_field.db_column: True,
+                multiple_select_field.db_column: [option_d.id],
+            },
+            {multiple_select_field.db_column: [option_a.id, option_b.id]},
+            {multiple_select_field.db_column: [option_c.id, option_d.id]},
+            {
+                boolean_field.db_column: True,
+                multiple_select_field.db_column: [option_b.id],
+            },
+            {},
+        ],
+    )
+
+    formula_field = data_fixture.create_formula_field(
+        user=user,
+        table=table_a,
+        formula=f"count(filter(lookup('link', 'mm'), lookup('link', 'check')))",
+    )
+
+    row_a1, row_a2, row_a3 = RowHandler().create_rows(
+        user,
+        table_a,
+        [
+            {link_field.db_column: [rows_b[0].id, rows_b[1].id]},
+            {link_field.db_column: [rows_b[2].id, rows_b[3].id, rows_b[4].id]},
+            {link_field.db_column: [rows_b[4].id, rows_b[5].id, rows_b[6].id]},
+        ],
+    )
+
+    # autonr of row_b[0], because it's the only one with check=True
+    assert getattr(row_a1, formula_field.db_column) == 2  # a and b
+    assert getattr(row_a2, formula_field.db_column) == 1  # autonr of row_b[2], d
+    assert getattr(row_a3, formula_field.db_column) == 1  # autonr of row_b[5], b

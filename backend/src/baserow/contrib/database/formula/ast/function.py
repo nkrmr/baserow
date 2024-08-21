@@ -1,4 +1,5 @@
 import abc
+from datetime import timedelta
 from typing import List, Type
 
 from django.db.models import (
@@ -11,6 +12,7 @@ from django.db.models import (
     Subquery,
     Value,
 )
+from django.db.models.fields import DurationField
 from django.db.models.functions import Coalesce
 
 from baserow.contrib.database.formula.ast.tree import (
@@ -274,13 +276,17 @@ def aggregate_wrapper(
     # if the output field type is a number, return 0 instead of null
     if isinstance(output_field, DecimalField):
         expr = Coalesce(expr, Value(0), output_field=output_field)
+    elif isinstance(output_field, DurationField):
+        expr = Coalesce(expr, timedelta(hours=0), output_field=output_field)
 
     return WrappedExpressionWithMetadata(
         ExpressionWrapper(expr, output_field=output_field)
     )
 
 
-def aggregate_filters_on_expression(expr_with_metadata: WrappedExpressionWithMetadata):
+def aggregate_expr_with_metadata_filters(
+    expr_with_metadata: WrappedExpressionWithMetadata,
+) -> Expression:
     """
     Combines all the aggregate filters on the expression into a single filter.
     This function is called before aggregating the expression.
@@ -290,11 +296,11 @@ def aggregate_filters_on_expression(expr_with_metadata: WrappedExpressionWithMet
     """
 
     aggregate_filters = expr_with_metadata.aggregate_filters
+    combined_filter: Expression = Value(True)
     if len(aggregate_filters) > 0:
-        combined_filter: Expression = Value(True)
         for f in aggregate_filters:
             combined_filter = AndExpr(combined_filter, f)
-        expr_with_metadata.expression.filter = combined_filter
+    return combined_filter
 
 
 def construct_not_null_filters_for_inner_join(pre_annotations):
@@ -326,13 +332,14 @@ def construct_aggregate_wrapper_queryset(
         pre_annotations
     )
 
-    aggregate_filters_on_expression(expr_with_metadata)
+    aggregate_filters = aggregate_expr_with_metadata_filters(expr_with_metadata)
 
     return (
         model.objects_and_trash.annotate(**pre_annotations)
         .filter(id=OuterRef("id"), **not_null_filters_for_inner_join)
         .values("id")
         .annotate(**{result_key: expr_with_metadata.expression})
+        .filter(aggregate_filters)
         .order_by()
         .values(result_key)
     )

@@ -4,7 +4,12 @@ import _ from 'lodash'
 
 import AuthService from '@baserow/modules/core/services/auth'
 import WorkspaceService from '@baserow/modules/core/services/workspace'
-import { setToken, unsetToken } from '@baserow/modules/core/utils/auth'
+import {
+  setToken,
+  setUserSessionCookie,
+  unsetToken,
+  unsetUserSessionCookie,
+} from '@baserow/modules/core/utils/auth'
 import { unsetWorkspaceCookie } from '@baserow/modules/core/utils/workspace'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -14,8 +19,10 @@ export const state = () => ({
   refreshToken: null,
   tokenUpdatedAt: 0,
   tokenPayload: null,
+  refreshTokenPayload: null,
   permissions: [],
   user: null,
+  signedUserSession: null,
   authenticated: false,
   additional: {},
   webSocketId: null,
@@ -35,6 +42,7 @@ export const mutations = {
     {
       access_token,
       refresh_token,
+      user_session,
       user,
       permissions,
       tokenUpdatedAt,
@@ -44,7 +52,11 @@ export const mutations = {
     state.token = access_token
     state.refreshToken = refresh_token
     state.tokenUpdatedAt = tokenUpdatedAt || new Date().getTime()
+    state.signedUserSession = user_session
     state.tokenPayload = jwtDecode(state.token)
+    if (state.refreshToken) {
+      state.refreshTokenPayload = jwtDecode(state.refreshToken)
+    }
     // Global permissions annotated on the User.
     state.permissions = permissions
     /* eslint-enable camelcase */
@@ -72,6 +84,7 @@ export const mutations = {
     state.refreshToken = null
     state.tokenUpdatedAt = 0
     state.tokenPayload = null
+    state.refreshTokenPayload = null
     state.authenticated = false
     state.permissions = []
   },
@@ -80,6 +93,7 @@ export const mutations = {
     state.refreshToken = null
     state.tokenUpdatedAt = 0
     state.tokenPayload = null
+    state.refreshTokenPayload = null
     state.user = null
     state.authenticated = false
     state.permissions = []
@@ -130,6 +144,7 @@ export const actions = {
 
     if (!getters.getPreventSetToken) {
       setToken(this.app, getters.refreshToken)
+      setUserSessionCookie(this.app, getters.signedUserSession)
     }
     return data.user
   },
@@ -157,8 +172,12 @@ export const actions = {
       workspaceInvitationToken,
       templateId
     )
-    setToken(this.app, data.refresh_token)
-    dispatch('setUserData', data)
+
+    if (data.refresh_token) {
+      setToken(this.app, data.refresh_token)
+      setUserSessionCookie(this.app, data.user_session)
+      dispatch('setUserData', data)
+    }
   },
   /**
    * Logs off the user by removing the token as a cookie and clearing the user
@@ -178,6 +197,7 @@ export const actions = {
   },
   forceLogoff({ commit }) {
     unsetToken(this.app)
+    unsetUserSessionCookie(this.app)
     unsetWorkspaceCookie(this.app)
     commit('LOGOFF')
   },
@@ -218,6 +238,7 @@ export const actions = {
     } catch (error) {
       if (error.response?.status === 401) {
         unsetToken(this.app)
+        unsetUserSessionCookie(this.app)
         unsetWorkspaceCookie(this.app)
         if (getters.isAuthenticated) {
           dispatch('setUserSessionExpired', true)
@@ -274,6 +295,7 @@ export const actions = {
   },
   setUserSessionExpired({ commit }, value) {
     unsetToken(this.app)
+    unsetUserSessionCookie(this.app)
     unsetWorkspaceCookie(this.app)
     commit('SET_USER_SESSION_EXPIRED', value)
   },
@@ -316,6 +338,12 @@ export const getters = {
   },
   refreshToken(state) {
     return state.refreshToken
+  },
+  refreshTokenPayload(state) {
+    return state.refreshTokenPayload
+  },
+  signedUserSession(state) {
+    return state.signedUserSession
   },
   webSocketId(state) {
     return state.webSocketId

@@ -5,6 +5,12 @@ import ABInput from '@baserow/modules/builder/components/elements/baseComponents
 import ABFormGroup from '@baserow/modules/builder/components/elements/baseComponents/ABFormGroup'
 import ABLink from '@baserow/modules/builder/components/elements/baseComponents/ABLink'
 import ABHeading from '@baserow/modules/builder/components/elements/baseComponents/ABHeading'
+import ABDropdown from '@baserow/modules/builder/components/elements/baseComponents/ABDropdown'
+import ABDropdownItem from '@baserow/modules/builder/components/elements/baseComponents/ABDropdownItem'
+import ABCheckbox from '@baserow/modules/builder/components/elements/baseComponents/ABCheckbox.vue'
+import ABRadio from '@baserow/modules/builder/components/elements/baseComponents/ABRadio.vue'
+import ABImage from '@baserow/modules/builder/components/elements/baseComponents/ABImage.vue'
+import ABParagraph from '@baserow/modules/builder/components/elements/baseComponents/ABParagraph.vue'
 
 function setupVueForAB(Vue) {
   Vue.component('ABButton', ABButton)
@@ -12,6 +18,12 @@ function setupVueForAB(Vue) {
   Vue.component('ABFormGroup', ABFormGroup)
   Vue.component('ABLink', ABLink)
   Vue.component('ABHeading', ABHeading)
+  Vue.component('ABDropdown', ABDropdown)
+  Vue.component('ABDropdownItem', ABDropdownItem)
+  Vue.component('ABCheckbox', ABCheckbox)
+  Vue.component('ABRadio', ABRadio)
+  Vue.component('ABImage', ABImage)
+  Vue.component('ABParagraph', ABParagraph)
 }
 
 setupVueForAB(Vue)

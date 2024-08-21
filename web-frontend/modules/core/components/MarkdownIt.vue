@@ -27,6 +27,9 @@ export default {
       htmlContent: '',
     }
   },
+  async fetch() {
+    await this.render(this.content)
+  },
   computed: {
     // Makes content watchable
     localContent() {
@@ -35,16 +38,19 @@ export default {
   },
   watch: {
     localContent(newValue) {
-      if (this.md) {
-        this.htmlContent = this.md.render(newValue)
-      }
+      this.render(newValue)
     },
   },
-  async created() {
-    const Markdown = (await import('markdown-it')).default
-    this.md = new Markdown()
-    this.md.renderer.rules = { ...this.md.renderer.rules, ...this.rules }
-    this.htmlContent = this.md.render(this.content)
+  methods: {
+    async render(value) {
+      if (!this.md) {
+        const Markdown = (await import('markdown-it')).default
+        this.md = new Markdown()
+        this.md.renderer.rules = { ...this.md.renderer.rules, ...this.rules }
+      }
+
+      this.htmlContent = this.md.render(value)
+    },
   },
 }
 </script>

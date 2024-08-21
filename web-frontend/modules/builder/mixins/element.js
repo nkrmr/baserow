@@ -1,15 +1,12 @@
 import RuntimeFormulaContext from '@baserow/modules/core/runtimeFormulaContext'
 import { resolveFormula } from '@baserow/modules/core/formula'
-import {
-  ClickEvent,
-  SubmitEvent,
-  AfterLoginEvent,
-} from '@baserow/modules/builder/eventTypes'
 import { resolveColor } from '@baserow/modules/core/utils/colors'
-import { themeToColorVariables } from '@baserow/modules/builder/utils/theme'
+import applicationContextMixin from '@baserow/modules/builder/mixins/applicationContext'
+import { ThemeConfigBlockType } from '@baserow/modules/builder/themeConfigBlockTypes'
 
 export default {
-  inject: ['builder', 'page', 'mode'],
+  inject: ['workspace', 'builder', 'page', 'mode'],
+  mixins: [applicationContextMixin],
   props: {
     element: {
       type: Object,
@@ -21,8 +18,16 @@ export default {
       const workflowActions = this.$store.getters[
         'workflowAction/getElementWorkflowActions'
       ](this.page, this.element.id)
+      const { recordIndexPath } = this.applicationContext
+      const dispatchedById = this.elementType.uniqueElementId(
+        this.element,
+        recordIndexPath
+      )
       return workflowActions.some((workflowAction) =>
-        this.$store.getters['workflowAction/getDispatching'](workflowAction)
+        this.$store.getters['workflowAction/getDispatching'](
+          workflowAction,
+          dispatchedById
+        )
       )
     },
     elementType() {
@@ -30,14 +35,6 @@ export default {
     },
     isEditMode() {
       return this.mode === 'editing'
-    },
-    applicationContext() {
-      return {
-        builder: this.builder,
-        page: this.page,
-        mode: this.mode,
-        element: this.element,
-      }
     },
     runtimeFormulaContext() {
       /**
@@ -62,23 +59,29 @@ export default {
         },
       }
     },
+    themeConfigBlocks() {
+      return this.$registry.getOrderedList('themeConfigBlock')
+    },
     colorVariables() {
-      return themeToColorVariables(this.builder.theme)
+      return ThemeConfigBlockType.getAllColorVariables(
+        this.themeConfigBlocks,
+        this.builder.theme
+      )
     },
   },
   methods: {
-    resolveFormula(formula) {
+    resolveFormula(formula, formulaContext = null) {
       try {
         return resolveFormula(
           formula,
           this.formulaFunctions,
-          this.runtimeFormulaContext
+          formulaContext || this.runtimeFormulaContext
         )
       } catch (e) {
         return ''
       }
     },
-    async fireEvent(EventType) {
+    async fireEvent(event) {
       if (this.mode !== 'editing') {
         if (this.workflowActionsInProgress) {
           return false
@@ -86,14 +89,12 @@ export default {
 
         const workflowActions = this.$store.getters[
           'workflowAction/getElementWorkflowActions'
-        ](this.page, this.element.id)
+        ](this.page, this.element.id).filter(
+          ({ event: eventName }) => eventName === event.name
+        )
 
         try {
-          await new EventType({
-            i18n: this.$i18n,
-            store: this.$store,
-            registry: this.$registry,
-          }).fire({
+          await event.fire({
             workflowActions,
             resolveFormula: this.resolveFormula,
             applicationContext: this.applicationContext,
@@ -120,16 +121,14 @@ export default {
         }
       }
     },
-    fireClickEvent() {
-      return this.fireEvent(ClickEvent)
+    getStyleOverride(key, colorVariables = null) {
+      return ThemeConfigBlockType.getAllStyles(
+        this.themeConfigBlocks,
+        this.element.styles?.[key] || {},
+        colorVariables || this.colorVariables,
+        this.builder.theme
+      )
     },
-    fireSubmitEvent() {
-      this.fireEvent(SubmitEvent)
-    },
-    fireAfterLoginEvent() {
-      this.fireEvent(AfterLoginEvent)
-    },
-
     resolveColor,
   },
 }

@@ -6,8 +6,8 @@ from django.test.utils import override_settings
 import pytest
 from faker import Faker
 
-from baserow.contrib.database.fields.deferred_field_fk_updater import (
-    DeferredFieldFkUpdater,
+from baserow.contrib.database.fields.deferred_foreign_key_updater import (
+    DeferredForeignKeyUpdater,
 )
 from baserow.contrib.database.fields.field_types import PhoneNumberFieldType
 from baserow.contrib.database.fields.handler import FieldHandler
@@ -37,7 +37,7 @@ def test_import_export_text_field(data_fixture):
         text_serialized,
         ImportExportConfig(include_permission_data=True),
         id_mapping,
-        DeferredFieldFkUpdater(),
+        DeferredForeignKeyUpdater(),
     )
     assert text_field.id != text_field_imported.id
     assert text_field.name == text_field_imported.name
@@ -75,7 +75,7 @@ def test_import_export_formula_field(data_fixture, api_client):
         formula_serialized,
         ImportExportConfig(include_permission_data=True),
         id_mapping,
-        DeferredFieldFkUpdater(),
+        DeferredForeignKeyUpdater(),
     )
     assert formula_field.id != formula_field_imported.id
     assert formula_field.name == formula_field_imported.name
@@ -578,6 +578,8 @@ def test_human_readable_values(data_fixture):
         "formula_multipleselect": "",
         "lookup": "",
         "autonumber": "1",
+        "duration_rollup_sum": "0:00",
+        "duration_rollup_avg": "0:00",
     }
 
     for key, value in blank_expected.items():
@@ -605,7 +607,7 @@ def test_human_readable_values(data_fixture):
         "email": "test@example.com",
         "file": "a.txt, b.txt",
         "file_link_row": "name.txt, unnamed row 2",
-        "link_row": "linked_row_1, linked_row_2, unnamed row 3",
+        "link_row": "linked_row_1, linked_row_2, ",
         "long_text": "long_text",
         "negative_decimal": "-1.2",
         "negative_int": "-1",
@@ -633,6 +635,8 @@ def test_human_readable_values(data_fixture):
         "formula_multipleselect": "D, C, E",
         "lookup": "linked_row_1, linked_row_2, ",
         "autonumber": "2",
+        "duration_rollup_sum": "0:04",
+        "duration_rollup_avg": "0:02",
     }
 
     for key, value in expected.items():
@@ -680,7 +684,7 @@ def test_import_export_lookup_field(data_fixture, api_client):
     lookup.name = "rename to prevent import clash"
     lookup.save()
 
-    deferred_field_fk_updater = DeferredFieldFkUpdater()
+    deferred_field_fk_updater = DeferredForeignKeyUpdater()
     lookup_field_imported = lookup_field_type.import_serialized(
         table_a,
         lookup_serialized,
@@ -698,7 +702,7 @@ def test_import_export_lookup_field(data_fixture, api_client):
     assert lookup_field_imported.through_field_name == lookup.through_field_name
     assert lookup_field_imported.target_field_name == lookup.target_field_name
 
-    deferred_field_fk_updater.run_deferred_fk_updates(id_mapping["database_fields"])
+    deferred_field_fk_updater.run_deferred_fk_updates(id_mapping, "database_fields")
     lookup_field_imported.refresh_from_db()
     assert lookup_field_imported.through_field == lookup.through_field
     assert lookup_field_imported.target_field == lookup.target_field

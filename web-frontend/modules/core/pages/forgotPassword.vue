@@ -30,36 +30,37 @@
         </p>
         <Error :error="error"></Error>
         <form @submit.prevent="sendLink">
-          <div class="auth__control">
-            <label class="auth__control-label">{{
-              $t('field.emailAddress')
-            }}</label>
-            <div class="control__elements">
-              <input
-                ref="email"
-                v-model="account.email"
-                :class="{ 'input--error': $v.account.email.$error }"
-                type="text"
-                class="input"
-                :disabled="success"
-                @blur="$v.account.email.$touch()"
-              />
-              <div class="auth__control-error">
-                <div v-if="$v.account.email.$error" class="error">
-                  <i class="iconoir-warning-triangle"></i>
-                  {{ $t('error.invalidEmail') }}
-                </div>
-              </div>
-            </div>
-          </div>
+          <FormGroup
+            small-label
+            :label="$t('field.emailAddress')"
+            required
+            :error="$v.account.email.$error"
+            class="margin-bottom-2"
+          >
+            <FormInput
+              ref="email"
+              v-model="account.email"
+              :error="$v.account.email.$error"
+              :disabled="success"
+              size="large"
+              @blur="$v.account.email.$touch()"
+            >
+            </FormInput>
+            <template #error>
+              <i class="iconoir-warning-triangle"></i>
+              {{ $t('error.invalidEmail') }}
+            </template>
+          </FormGroup>
           <div class="auth__action">
-            <button
-              :class="{ 'button--loading': loading }"
-              class="button button--full-width"
+            <Button
+              type="primary"
+              full-width
+              size="large"
+              :loading="loading"
               :disabled="loading || success"
             >
               {{ $t('forgotPassword.submit') }}
-            </button>
+            </Button>
           </div>
           <div>
             <ul class="auth__action-links">
@@ -81,10 +82,16 @@
       <p class="box__message-text">
         {{ $t('forgotPassword.confirmation') }}
       </p>
-      <nuxt-link :to="{ name: 'login' }" class="button button--large">
-        <i class="iconoir-arrow-left"></i>
-        {{ $t('action.backToLogin') }}
-      </nuxt-link>
+
+      <Button
+        tag="nuxt-link"
+        :to="{ name: 'login' }"
+        type="primary"
+        size="large"
+        icon="iconoir-arrow-left"
+      >
+        {{ $t('action.backToLogin') }}</Button
+      >
     </div>
   </div>
 </template>

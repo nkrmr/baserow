@@ -11,6 +11,7 @@ const populateElement = (element) => {
     hasNextPage: false,
     reset: 0,
     shouldBeFocused: false,
+    elementNamespacePath: null,
   }
 
   return element
@@ -60,7 +61,7 @@ const orderElements = (elements, parentElementId = null) => {
 const updateCachedValues = (page) => {
   page.orderedElements = orderElements(page.elements)
   page.elementMap = Object.fromEntries(
-    page.orderedElements.map((element) => [element.id, element])
+    page.elements.map((element) => [`${element.id}`, element])
   )
 }
 
@@ -102,14 +103,18 @@ const mutations = {
     page.elements = []
     updateCachedValues(page)
   },
+  _SET_ELEMENT_NAMESPACE_PATH(state, { element, path }) {
+    element._.elementNamespacePath = path
+  },
 }
 
 const actions = {
   clearAll({ commit }, { page }) {
     commit('CLEAR_ITEMS', { page })
   },
-  forceCreate({ commit }, { page, element }) {
+  forceCreate({ dispatch, commit }, { page, element }) {
     commit('ADD_ITEM', { page, element })
+    dispatch('_setElementNamespacePath', { page, element })
 
     const elementType = this.$registry.get('element', element.type)
     elementType.afterCreate(element, page)
@@ -120,11 +125,7 @@ const actions = {
     elementType.afterUpdate(element, page)
   },
   forceDelete({ commit, getters }, { page, elementId }) {
-    const elementsOfPage = getters.getElementsOrdered(page)
-    const elementIndex = elementsOfPage.findIndex(
-      (element) => element.id === elementId
-    )
-    const elementToDelete = elementsOfPage[elementIndex]
+    const elementToDelete = getters.getElementById(page, elementId)
 
     if (getters.getSelected?.id === elementId) {
       commit('SELECT_ITEM', { element: null })
@@ -276,12 +277,7 @@ const actions = {
     })
   },
   async delete({ dispatch, getters }, { page, elementId }) {
-    const elementsOfPage = getters.getElementsOrdered(page)
-    const elementIndex = elementsOfPage.findIndex(
-      (element) => element.id === elementId
-    )
-    const elementToDelete = elementsOfPage[elementIndex]
-
+    const elementToDelete = getters.getElementById(page, elementId)
     const descendants = getters.getDescendants(page, elementToDelete)
 
     // First delete all children
@@ -309,21 +305,35 @@ const actions = {
       throw error
     }
   },
-  async fetch({ commit }, { page }) {
+  async fetch({ dispatch, commit }, { page }) {
     const { data: elements } = await ElementService(this.$client).fetchAll(
       page.id
     )
 
     commit('SET_ITEMS', { page, elements })
 
+    // Set the element namespace path of all elements we've fetched.
+    await Promise.all(
+      elements.map((element) =>
+        dispatch('_setElementNamespacePath', { page, element })
+      )
+    )
+
     return elements
   },
-  async fetchPublished({ commit }, { page }) {
+  async fetchPublished({ dispatch, commit }, { page }) {
     const { data: elements } = await PublicBuilderService(
       this.$client
     ).fetchElements(page)
 
     commit('SET_ITEMS', { page, elements })
+
+    // Set the element namespace ath of all published elements we've fetched.
+    await Promise.all(
+      elements.map((element) =>
+        dispatch('_setElementNamespacePath', { page, element })
+      )
+    )
 
     return elements
   },
@@ -338,6 +348,7 @@ const actions = {
     }
   ) {
     const element = getters.getElementById(page, elementId)
+    const { order: previousOrder, place_in_container: previousPlace } = element
 
     await dispatch('forceMove', {
       page,
@@ -359,10 +370,11 @@ const actions = {
           values: { ...elementUpdated },
         })
       } catch (error) {
+        // Restore previous order and place_in_container properties
         await dispatch('forceUpdate', {
           page,
           element,
-          values: element,
+          values: { order: previousOrder, place_in_container: previousPlace },
         })
         throw error
       }
@@ -415,11 +427,25 @@ const actions = {
     const elementType = this.$registry.get('element', element.type)
     await elementType.selectNextElement(page, element, placement)
   },
+  _setElementNamespacePath({ commit, dispatch, getters }, { page, element }) {
+    const elementType = this.$registry.get('element', element.type)
+    const elementNamespacePath = elementType.getElementNamespacePath(
+      element,
+      page
+    )
+    commit('_SET_ELEMENT_NAMESPACE_PATH', {
+      element,
+      path: elementNamespacePath,
+    })
+  },
 }
 
 const getters = {
   getElementById: (state, getters) => (page, id) => {
-    return page.elementMap[id]
+    if (id && Object.prototype.hasOwnProperty.call(page.elementMap, `${id}`)) {
+      return page.elementMap[`${id}`]
+    }
+    return null
   },
   getElementsOrdered: (state, getters) => (page) => {
     return page.orderedElements
@@ -435,25 +461,41 @@ const getters = {
       .filter((e) => e.parent_element_id === element.id)
   },
   getDescendants: (state, getters) => (page, element) => {
-    return getters
-      .getChildren(page, element)
-      .map((child) => [...getters.getChildren(page, child), child])
-      .flat()
-  },
-  getParent: (state, getters) => (page, element) => {
-    return getters.getElementById(page, element.parent_element_id)
-  },
-  getAncestors: (state, getters) => (page, element) => {
-    const getElementAncestors = (element) => {
-      if (element.parent_element_id === null) {
+    const getAllDescendants = (page, element) => {
+      const children = getters.getChildren(page, element)
+      if (children.length === 0) {
         return []
       } else {
-        const parentElement = getters.getParent(page, element)
-        return [...getElementAncestors(parentElement), parentElement]
+        return children.flatMap((child) => [
+          child,
+          ...getAllDescendants(page, child),
+        ])
       }
     }
-    return getElementAncestors(element)
+    return getAllDescendants(page, element)
   },
+  getParent: (state, getters) => (page, element) => {
+    return getters.getElementById(page, element?.parent_element_id)
+  },
+  /**
+   * Given an element, return all its ancestors until we reach the root element.
+   * If `parentFirst` is `true` then we reverse the array of elements so that
+   * the element's immediate parent is first, otherwise the root element will be first.
+   */
+  getAncestors:
+    (state, getters) =>
+    (page, element, parentFirst = true) => {
+      const getElementAncestors = (element) => {
+        const parentElement = getters.getParent(page, element)
+        if (parentElement) {
+          return [...getElementAncestors(parentElement), parentElement]
+        } else {
+          return []
+        }
+      }
+      const ancestors = getElementAncestors(element)
+      return parentFirst ? ancestors.reverse() : ancestors
+    },
   getSiblings: (state, getters) => (page, element) => {
     return getters
       .getElementsOrdered(page)
@@ -504,6 +546,9 @@ const getters = {
   },
   getSelected(state) {
     return state.selected
+  },
+  getElementNamespacePath: (state) => (element) => {
+    return element._.elementNamespacePath
   },
   /**
    * Given an element, return its closest sibling element.

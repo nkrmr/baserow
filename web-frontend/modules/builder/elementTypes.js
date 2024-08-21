@@ -12,10 +12,15 @@ import InputTextElementForm from '@baserow/modules/builder/components/elements/c
 import TableElement from '@baserow/modules/builder/components/elements/components/TableElement'
 import TableElementForm from '@baserow/modules/builder/components/elements/components/forms/general/TableElementForm'
 import {
+  ensureArray,
   ensureBoolean,
   ensureString,
 } from '@baserow/modules/core/utils/validator'
-import { ELEMENT_EVENTS, PLACEMENTS } from '@baserow/modules/builder/enums'
+import {
+  CHOICE_OPTION_TYPES,
+  ELEMENT_EVENTS,
+  PLACEMENTS,
+} from '@baserow/modules/builder/enums'
 import ColumnElement from '@baserow/modules/builder/components/elements/components/ColumnElement'
 import ColumnElementForm from '@baserow/modules/builder/components/elements/components/forms/general/ColumnElementForm'
 import _ from 'lodash'
@@ -27,12 +32,14 @@ import RuntimeFormulaContext from '@baserow/modules/core/runtimeFormulaContext'
 import { resolveFormula } from '@baserow/modules/core/formula'
 import FormContainerElement from '@baserow/modules/builder/components/elements/components/FormContainerElement.vue'
 import FormContainerElementForm from '@baserow/modules/builder/components/elements/components/forms/general/FormContainerElementForm.vue'
-import DropdownElement from '@baserow/modules/builder/components/elements/components/DropdownElement.vue'
-import DropdownElementForm from '@baserow/modules/builder/components/elements/components/forms/general/DropdownElementForm.vue'
+import ChoiceElement from '@baserow/modules/builder/components/elements/components/ChoiceElement.vue'
+import ChoiceElementForm from '@baserow/modules/builder/components/elements/components/forms/general/ChoiceElementForm.vue'
 import CheckboxElement from '@baserow/modules/builder/components/elements/components/CheckboxElement.vue'
 import CheckboxElementForm from '@baserow/modules/builder/components/elements/components/forms/general/CheckboxElementForm.vue'
 import IFrameElement from '@baserow/modules/builder/components/elements/components/IFrameElement.vue'
 import IFrameElementForm from '@baserow/modules/builder/components/elements/components/forms/general/IFrameElementForm.vue'
+import RepeatElement from '@baserow/modules/builder/components/elements/components/RepeatElement'
+import RepeatElementForm from '@baserow/modules/builder/components/elements/components/forms/general/RepeatElementForm'
 import { pathParametersInError } from '@baserow/modules/builder/utils/params'
 import { isNumeric, isValidEmail } from '@baserow/modules/core/utils/string'
 
@@ -71,22 +78,24 @@ export class ElementType extends Registerable {
       'style_padding_bottom',
       'style_padding_left',
       'style_padding_right',
+      'style_margin_top',
+      'style_margin_bottom',
+      'style_margin_left',
+      'style_margin_right',
       'style_border_top',
       'style_border_bottom',
       'style_border_left',
       'style_border_right',
       'style_background',
       'style_background_color',
+      'style_background_file',
+      'style_background_mode',
       'style_width',
     ]
   }
 
   get styles() {
     return this.stylesAll
-  }
-
-  get events() {
-    return []
   }
 
   /**
@@ -100,8 +109,12 @@ export class ElementType extends Registerable {
     return this.name
   }
 
-  getEvents() {
-    return this.events.map((EventType) => new EventType(this.app))
+  getEvents(element) {
+    return []
+  }
+
+  getEventByName(element, name) {
+    return this.getEvents(element).find((event) => event.name === name)
   }
 
   /**
@@ -138,6 +151,16 @@ export class ElementType extends Registerable {
     return values
   }
 
+  /**
+   * When a data source is modified or destroyed, `element/emitElementEvent`
+   * can be dispatched to notify all elements of the event. Element types
+   * can implement this function to handle the cases.
+   *
+   * @param event - `ELEMENT_EVENTS.DATA_SOURCE_REMOVED` if a data source
+   *  has been destroyed, or `ELEMENT_EVENTS.DATA_SOURCE_AFTER_UPDATE` if
+   *  it's been updated.
+   * @param params - Context data which the element type can use.
+   */
   onElementEvent(event, params) {}
 
   resolveFormula(formula, applicationContext) {
@@ -160,6 +183,29 @@ export class ElementType extends Registerable {
     )
 
     return resolveFormula(formula, formulaFunctions, runtimeFormulaContext)
+  }
+
+  /**
+   * Responsible for returning an array of collection element IDs that represent
+   * the ancestry of this element. It's used to determine the accessible path
+   * between elements that have access to the form data provider. If an element
+   * is in the path of a form element, then it can use its form data.
+   *
+   * @param {Object} element - The element we're the path for.
+   * @param {Object} page - The page the element belongs to.
+   */
+  getElementNamespacePath(element, page) {
+    const ancestors = this.app.store.getters['element/getAncestors'](
+      page,
+      element
+    )
+    return ancestors
+      .map((ancestor) => {
+        const elementType = this.app.$registry.get('element', ancestor.type)
+        return elementType.isCollectionElement ? ancestor.id : null
+      })
+      .filter((id) => id !== null)
+      .reverse()
   }
 
   /**
@@ -366,63 +412,165 @@ export class ElementType extends Registerable {
       ...this.getVerticalPlacementsDisabled(page, element),
     ]
   }
+
+  /**
+   * Generates a unique element id based on the element and if provided, an array
+   * representing a path to access form data. Most elements will have a unique
+   * ID that matches their `id`, but when an element is part of one or more repeats,
+   * we need to ensure that the ID is unique for each record.
+   *
+   * @param {Object} element - The element we want to generate a unique ID for.
+   * @param {Array} recordIndexPath - An array of integers which represent the
+   * record indices we've accumulated through nested collection element ancestors.
+   * @returns {String} - The unique element ID.
+   *
+   */
+  uniqueElementId(element, recordIndexPath) {
+    return [element.id, ...(recordIndexPath || [])].join('.')
+  }
 }
 
-export class ContainerElementType extends ElementType {
-  get elementTypesAll() {
-    return Object.values(this.app.$registry.getAll('element'))
+const ContainerElementTypeMixin = (Base) =>
+  class extends Base {
+    isContainerElement = true
+
+    get elementTypesAll() {
+      return Object.values(this.app.$registry.getAll('element'))
+    }
+
+    /**
+     * Returns an array of element types that are not allowed as children of this element type.
+     * @returns {Array} An array of forbidden child element types.
+     */
+    get childElementTypesForbidden() {
+      return []
+    }
+
+    /**
+     * Returns an array of element types that are allowed as children of this element.
+     * If the parent element we're trying to add a child to has a parent, we'll check
+     * each parent until the root element if they have any forbidden element types to
+     * include as well.
+     * @param page
+     * @param element
+     * @returns {Array} An array of permitted child element types.
+     */
+    childElementTypes(page, element) {
+      if (element.parent_element_id) {
+        const parentElement = this.app.store.getters['element/getElementById'](
+          page,
+          element.parent_element_id
+        )
+        const parentElementType = this.app.$registry.get(
+          'element',
+          parentElement.type
+        )
+        return _.difference(
+          parentElementType.childElementTypes(page, parentElement),
+          this.childElementTypesForbidden
+        )
+      }
+      return _.difference(this.elementTypesAll, this.childElementTypesForbidden)
+    }
+
+    /**
+     * Returns an array of style types that are not allowed as children of this element.
+     * @returns {Array}
+     */
+    get childStylesForbidden() {
+      return []
+    }
+
+    get defaultPlaceInContainer() {
+      throw new Error('Not implemented')
+    }
+
+    /**
+     * Returns the default value when creating a child element to this container.
+     * @param {Object} page The current page object
+     * @param {Object} values The values of the to be created element
+     * @returns the default values for this element.
+     */
+    getDefaultChildValues(page, values) {
+      // By default, an element inside a container should have no left and right padding
+      return { style_padding_left: 0, style_padding_right: 0 }
+    }
+
+    /**
+     * Given a `page` and an `element`, move the child element of a container
+     * in the direction specified by the `placement`.
+     *
+     * The default implementation only supports moving the element vertically.
+     *
+     * @param {Object} page The page that is the parent component.
+     * @param {Number} element The child element to be moved.
+     * @param {String} placement The direction in which the element should move.
+     */
+    async moveChildElement(page, parentElement, element, placement) {
+      if (placement === PLACEMENTS.AFTER || placement === PLACEMENTS.BEFORE) {
+        await this.moveElementInSamePlace(page, element, placement)
+      }
+    }
+
+    /**
+     * Return an array of placements that are disallowed for the elements to move
+     * in their container.
+     *
+     * @param {Object} page The page that is the parent component.
+     * @param {Number} element The child element for which the placements should
+     *    be calculated.
+     * @returns {Array} An array of placements that are disallowed for the element.
+     */
+    getPlacementsDisabledForChild(page, containerElement, element) {
+      this.getPlacementsDisabled(page, element)
+    }
+
+    getNextHorizontalElementToSelect(page, element, placement) {
+      return null
+    }
+  }
+
+export class FormContainerElementType extends ContainerElementTypeMixin(
+  ElementType
+) {
+  static getType() {
+    return 'form_container'
+  }
+
+  get name() {
+    return this.app.i18n.t('elementType.formContainer')
+  }
+
+  get description() {
+    return this.app.i18n.t('elementType.formContainerDescription')
+  }
+
+  get iconClass() {
+    return 'iconoir-frame'
+  }
+
+  get component() {
+    return FormContainerElement
+  }
+
+  get generalFormComponent() {
+    return FormContainerElementForm
   }
 
   /**
-   * Returns an array of element types that are not allowed as children of this element.
-   *
-   * @returns {Array}
+   * Exclude element types which are not a form element.
+   * @returns {Array} An array of non-form element types.
    */
   get childElementTypesForbidden() {
-    return []
+    return this.elementTypesAll.filter((type) => !type.isFormElement)
   }
 
-  get childElementTypes() {
-    return _.difference(this.elementTypesAll, this.childElementTypesForbidden)
-  }
-
-  /**
-   * Returns an array of style types that are not allowed as children of this element.
-   * @returns {Array}
-   */
   get childStylesForbidden() {
-    return []
+    return ['style_width']
   }
 
-  get defaultPlaceInContainer() {
-    throw new Error('Not implemented')
-  }
-
-  /**
-   * Returns the default value when creating a child element to this container.
-   * @param {Object} page The current page object
-   * @param {Object} values The values of the to be created element
-   * @returns the default values for this element.
-   */
-  getDefaultChildValues(page, values) {
-    // By default an element inside a container should have no left and right padding
-    return { style_padding_left: 0, style_padding_right: 0 }
-  }
-
-  /**
-   * Given a `page` and an `element`, move the child element of a container
-   * in the direction specified by the `placement`.
-   *
-   * The default implementation only supports moving the element vertically.
-   *
-   * @param {Object} page The page that is the parent component.
-   * @param {Number} element The child element to be moved.
-   * @param {String} placement The direction in which the element should move.
-   */
-  async moveChildElement(page, parentElement, element, placement) {
-    if (placement === PLACEMENTS.AFTER || placement === PLACEMENTS.BEFORE) {
-      await this.moveElementInSamePlace(page, element, placement)
-    }
+  getEvents(element) {
+    return [new SubmitEvent({ ...this.app })]
   }
 
   /**
@@ -435,16 +583,16 @@ export class ContainerElementType extends ElementType {
    * @returns {Array} An array of placements that are disallowed for the element.
    */
   getPlacementsDisabledForChild(page, containerElement, element) {
-    super.getPlacementsDisabled(page, element)
-  }
-
-  getNextHorizontalElementToSelect(page, element, placement) {
-    return null
+    return [
+      PLACEMENTS.LEFT,
+      PLACEMENTS.RIGHT,
+      ...this.getVerticalPlacementsDisabled(page, element),
+    ]
   }
 }
 
-export class ColumnElementType extends ContainerElementType {
-  getType() {
+export class ColumnElementType extends ContainerElementTypeMixin(ElementType) {
+  static getType() {
     return 'column'
   }
 
@@ -468,9 +616,13 @@ export class ColumnElementType extends ContainerElementType {
     return ColumnElementForm
   }
 
+  /**
+   * Exclude element types which are containers.
+   * @returns {Array} An array of container element types.
+   */
   get childElementTypesForbidden() {
     return this.elementTypesAll.filter(
-      (elementType) => elementType instanceof ContainerElementType
+      (elementType) => elementType.isContainerElement
     )
   }
 
@@ -566,15 +718,195 @@ export class ColumnElementType extends ContainerElementType {
   }
 }
 
+const CollectionElementTypeMixin = (Base) =>
+  class extends Base {
+    isCollectionElement = true
+    getDisplayName(element, { page }) {
+      let suffix = ''
+
+      if (element.data_source_id) {
+        const dataSource = this.app.store.getters[
+          'dataSource/getPageDataSourceById'
+        ](page, element.data_source_id)
+
+        suffix = dataSource ? ` - ${dataSource.name}` : ''
+      }
+
+      return `${this.name}${suffix}`
+    }
+
+    /**
+     * When a data source is modified or destroyed, we need to ensure that
+     * our collection elements respond accordingly.
+     *
+     * If the data source has been removed, we want to remove it from the
+     * collection element, and then clear its contents from the store.
+     *
+     * If the data source has been updated, we want to trigger a content reset.
+     *
+     * @param event - `ELEMENT_EVENTS.DATA_SOURCE_REMOVED` if a data source
+     *  has been destroyed, or `ELEMENT_EVENTS.DATA_SOURCE_AFTER_UPDATE` if
+     *  it's been updated.
+     * @param params - Context data which the element type can use.
+     */
+    async onElementEvent(event, { page, element, dataSourceId }) {
+      if (event === ELEMENT_EVENTS.DATA_SOURCE_REMOVED) {
+        if (element.data_source_id === dataSourceId) {
+          // Remove the data_source_id
+          await this.app.store.dispatch('element/forceUpdate', {
+            page,
+            element,
+            values: { data_source_id: null },
+          })
+          // Empty the element content
+          await this.app.store.dispatch('elementContent/clearElementContent', {
+            element,
+          })
+        }
+      }
+      if (event === ELEMENT_EVENTS.DATA_SOURCE_AFTER_UPDATE) {
+        if (element.data_source_id === dataSourceId) {
+          await this.app.store.dispatch(
+            'elementContent/triggerElementContentReset',
+            {
+              element,
+            }
+          )
+        }
+      }
+    }
+  }
+
+export class TableElementType extends CollectionElementTypeMixin(ElementType) {
+  static getType() {
+    return 'table'
+  }
+
+  get name() {
+    return this.app.i18n.t('elementType.table')
+  }
+
+  get description() {
+    return this.app.i18n.t('elementType.tableDescription')
+  }
+
+  get iconClass() {
+    return 'iconoir-table'
+  }
+
+  get component() {
+    return TableElement
+  }
+
+  get generalFormComponent() {
+    return TableElementForm
+  }
+
+  getEvents(element) {
+    return (element.fields || [])
+      .map(({ type, name, uid }) => {
+        const collectionFieldType = this.app.$registry.get(
+          'collectionField',
+          type
+        )
+        return collectionFieldType.events.map((EventType) => {
+          return new EventType({
+            ...this.app,
+            namePrefix: uid,
+            labelSuffix: `- ${name}`,
+          })
+        })
+      })
+      .flat()
+  }
+
+  isInError({ element, builder }) {
+    const collectionFieldsInError = element.fields.map((collectionField) => {
+      const collectionFieldType = this.app.$registry.get(
+        'collectionField',
+        collectionField.type
+      )
+      return collectionFieldType.isInError({
+        field: collectionField,
+        builder,
+      })
+    })
+    return collectionFieldsInError.includes(true)
+  }
+}
+
+export class RepeatElementType extends ContainerElementTypeMixin(
+  CollectionElementTypeMixin(ElementType)
+) {
+  static getType() {
+    return 'repeat'
+  }
+
+  get name() {
+    return this.app.i18n.t('elementType.repeat')
+  }
+
+  get description() {
+    return this.app.i18n.t('elementType.repeatDescription')
+  }
+
+  get iconClass() {
+    return 'iconoir-repeat'
+  }
+
+  get component() {
+    return RepeatElement
+  }
+
+  get generalFormComponent() {
+    return RepeatElementForm
+  }
+
+  /**
+   * The repeat elements will disallow collection elements (including itself),
+   * from being added as children.
+   * @returns {Array} An array of disallowed child element types.
+   */
+  get childElementTypesForbidden() {
+    return this.elementTypesAll.filter((type) => type.isCollectionElement)
+  }
+
+  /**
+   * Return an array of placements that are disallowed for the elements to move
+   * in their container.
+   *
+   * @param {Object} page The page that is the parent component.
+   * @param {Number} element The child element for which the placements should
+   *    be calculated.
+   * @returns {Array} An array of placements that are disallowed for the element.
+   */
+  getPlacementsDisabledForChild(page, containerElement, element) {
+    return [
+      PLACEMENTS.LEFT,
+      PLACEMENTS.RIGHT,
+      ...this.getVerticalPlacementsDisabled(page, element),
+    ]
+  }
+
+  /**
+   * A repeat element is in error whilst it has no data source.
+   * @param {Object} element - The repeat element
+   * @param {Object} builder - The builder application.
+   * @returns {Boolean} - Whether the element is in error.
+   */
+  isInError({ element, builder }) {
+    return element.data_source_id === null
+  }
+}
 /**
- * This class servers as a parent class for all form element types. Form element types
+ * This class serves as a parent class for all form element types. Form element types
  * are all elements that can be used as part of a form. So in simple terms, any element
  * that can represents data in a way that is directly modifiable by an application user.
  */
 export class FormElementType extends ElementType {
   isFormElement = true
 
-  get formDataType() {
+  formDataType(element) {
     return null
   }
 
@@ -582,7 +914,8 @@ export class FormElementType extends ElementType {
    * Given a form element, and a form data value, is responsible for validating
    * this form element type against that value. Returns whether the value is valid.
    * @param element - The form element
-   * @param value
+   * @param value - The value to be validated against
+   * @param applicationContext - The context of the current application
    * @returns {boolean}
    */
   isValid(element, value) {
@@ -616,21 +949,6 @@ export class FormElementType extends ElementType {
     return this.name
   }
 
-  afterCreate(element, page) {
-    const initialValue = this.getInitialFormDataValue(element, { page })
-    const payload = {
-      value: initialValue,
-      type: this.formDataType,
-      isValid: this.isValid(element, initialValue),
-    }
-
-    return this.app.store.dispatch('formData/setFormData', {
-      page,
-      payload,
-      elementId: element.id,
-    })
-  }
-
   afterDelete(element, page) {
     return this.app.store.dispatch('formData/removeFormData', {
       page,
@@ -641,14 +959,20 @@ export class FormElementType extends ElementType {
   getNextHorizontalElementToSelect(page, element, placement) {
     return null
   }
+
+  getDataSchema(element) {
+    return {
+      type: this.formDataType(element),
+    }
+  }
 }
 
 export class InputTextElementType extends FormElementType {
-  getType() {
+  static getType() {
     return 'input_text'
   }
 
-  isValid(element, value) {
+  isValid(element, value, applicationContext) {
     if (!value) {
       return !element.required
     }
@@ -683,7 +1007,7 @@ export class InputTextElementType extends FormElementType {
     return InputTextElementForm
   }
 
-  get formDataType() {
+  formDataType(element) {
     return 'string'
   }
 
@@ -701,10 +1025,14 @@ export class InputTextElementType extends FormElementType {
   }
 
   getInitialFormDataValue(element, applicationContext) {
-    return this.resolveFormula(element.default_value, {
-      element,
-      ...applicationContext,
-    })
+    try {
+      return this.resolveFormula(element.default_value, {
+        element,
+        ...applicationContext,
+      })
+    } catch {
+      return ''
+    }
   }
 }
 
@@ -843,7 +1171,7 @@ export class LinkElementType extends ElementType {
 }
 
 export class ImageElementType extends ElementType {
-  getType() {
+  static getType() {
     return 'image'
   }
 
@@ -879,7 +1207,7 @@ export class ImageElementType extends ElementType {
 }
 
 export class ButtonElementType extends ElementType {
-  getType() {
+  static getType() {
     return 'button'
   }
 
@@ -903,8 +1231,8 @@ export class ButtonElementType extends ElementType {
     return ButtonElementForm
   }
 
-  get events() {
-    return [ClickEvent]
+  getEvents(element) {
+    return [new ClickEvent({ ...this.app })]
   }
 
   getDisplayName(element, applicationContext) {
@@ -918,98 +1246,17 @@ export class ButtonElementType extends ElementType {
   }
 }
 
-export class TableElementType extends ElementType {
-  getType() {
-    return 'table'
-  }
-
-  get name() {
-    return this.app.i18n.t('elementType.table')
-  }
-
-  get description() {
-    return this.app.i18n.t('elementType.tableDescription')
-  }
-
-  get iconClass() {
-    return 'iconoir-table'
-  }
-
-  get component() {
-    return TableElement
-  }
-
-  get generalFormComponent() {
-    return TableElementForm
-  }
-
-  async onElementEvent(event, { page, element, dataSourceId }) {
-    if (event === ELEMENT_EVENTS.DATA_SOURCE_REMOVED) {
-      if (element.data_source_id === dataSourceId) {
-        // Remove the data_source_id
-        await this.app.store.dispatch('element/forceUpdate', {
-          page,
-          element,
-          values: { data_source_id: null },
-        })
-        // Empty the element content
-        await this.app.store.dispatch('elementContent/clearElementContent', {
-          element,
-        })
-      }
-    }
-    if (event === ELEMENT_EVENTS.DATA_SOURCE_AFTER_UPDATE) {
-      if (element.data_source_id === dataSourceId) {
-        await this.app.store.dispatch(
-          'elementContent/triggerElementContentReset',
-          {
-            element,
-          }
-        )
-      }
-    }
-  }
-
-  isInError({ element, builder }) {
-    const collectionFieldsInError = element.fields.map((collectionField) => {
-      const collectionFieldType = this.app.$registry.get(
-        'collectionField',
-        collectionField.type
-      )
-      return collectionFieldType.isInError({
-        field: collectionField,
-        builder,
-      })
-    })
-    return collectionFieldsInError.includes(true)
-  }
-
-  getDisplayName(element, { page }) {
-    let suffix = ''
-
-    if (element.data_source_id) {
-      const dataSource = this.app.store.getters[
-        'dataSource/getPageDataSourceById'
-      ](page, element.data_source_id)
-
-      suffix = dataSource ? ` - ${dataSource.name}` : ''
-    }
-
-    return `${this.name}${suffix}`
-  }
-}
-
-export class DropdownElementType extends FormElementType {
+export class ChoiceElementType extends FormElementType {
   static getType() {
-    return 'dropdown'
+    return 'choice'
   }
 
   get name() {
-    return this.app.i18n.t('elementType.dropdown')
+    return this.app.i18n.t('elementType.choice')
   }
 
   get description() {
-    return this.app.i18n.t('elementType.dropdownDescription')
+    return this.app.i18n.t('elementType.choiceDescription')
   }
 
   get iconClass() {
@@ -1017,24 +1264,28 @@ export class DropdownElementType extends FormElementType {
   }
 
   get component() {
-    return DropdownElement
+    return ChoiceElement
   }
 
   get generalFormComponent() {
-    return DropdownElementForm
+    return ChoiceElementForm
   }
 
-  get formDataType() {
-    return 'string'
+  formDataType(element) {
+    return element.multiple ? 'array' : 'string'
   }
 
   getInitialFormDataValue(element, applicationContext) {
-    return ensureString(
-      this.resolveFormula(element.default_value, {
-        element,
-        ...applicationContext,
-      })
-    )
+    try {
+      return ensureString(
+        this.resolveFormula(element.default_value, {
+          element,
+          ...applicationContext,
+        })
+      )
+    } catch {
+      return element.multiple ? [] : ''
+    }
   }
 
   getDisplayName(element, applicationContext) {
@@ -1051,76 +1302,62 @@ export class DropdownElementType extends FormElementType {
   }
 
   /**
-   * Responsible for validating the dropdown form element. It behaves slightly
-   * differently so that dropdown options with blank values are valid. We simply
-   * test if the value is one of the dropdown's own values.
-   * @param element - The dropdown form element
+   * Responsible for validating the choice form element. It behaves slightly
+   * differently so that choice options with blank values are valid. We simply
+   * test if the value is one of the choice's own values.
+   * @param element - The choice form element
    * @param value - The value we are validating.
+   * @param applicationContext - Required when using formula resolution.
    * @returns {boolean}
    */
-  isValid(element, value) {
-    const validOption = element.options.find((option) => option.value === value)
+  isValid(element, value, applicationContext) {
+    const options =
+      element.option_type === CHOICE_OPTION_TYPES.FORMULAS
+        ? ensureArray(
+            this.resolveFormula(element.formula_value, {
+              element,
+              ...applicationContext,
+            })
+          ).map(ensureString)
+        : element.options.map((option) => option.value)
+
+    const validOption = element.multiple
+      ? options.some((option) => value.includes(option))
+      : options.includes(value)
     return !(element.required && !validOption)
   }
-}
 
-export class FormContainerElementType extends ContainerElementType {
-  static getType() {
-    return 'form_container'
+  isInError({ element, builder }) {
+    switch (element.option_type) {
+      case CHOICE_OPTION_TYPES.MANUAL:
+        return element.options.length === 0
+      case CHOICE_OPTION_TYPES.FORMULAS: {
+        return element.formula_value === ''
+      }
+      default:
+        return true
+    }
   }
 
-  get name() {
-    return this.app.i18n.t('elementType.formContainer')
-  }
-
-  get description() {
-    return this.app.i18n.t('elementType.formContainerDescription')
-  }
-
-  get iconClass() {
-    return 'iconoir-frame'
-  }
-
-  get component() {
-    return FormContainerElement
-  }
-
-  get generalFormComponent() {
-    return FormContainerElementForm
-  }
-
-  get childElementTypesForbidden() {
-    return this.elementTypesAll.filter((type) => !type.isFormElement)
-  }
-
-  get events() {
-    return [SubmitEvent]
-  }
-
-  get childStylesForbidden() {
-    return ['style_width']
-  }
-
-  /**
-   * Return an array of placements that are disallowed for the elements to move
-   * in their container.
-   *
-   * @param {Object} page The page that is the parent component.
-   * @param {Number} element The child element for which the placements should
-   *    be calculated.
-   * @returns {Array} An array of placements that are disallowed for the element.
-   */
-  getPlacementsDisabledForChild(page, containerElement, element) {
-    return [
-      PLACEMENTS.LEFT,
-      PLACEMENTS.RIGHT,
-      ...this.getVerticalPlacementsDisabled(page, element),
-    ]
+  getDataSchema(element) {
+    const type = this.formDataType(element)
+    if (type === 'string') {
+      return {
+        type: 'string',
+      }
+    } else if (type === 'array') {
+      return {
+        type: 'array',
+        items: {
+          type: 'string',
+        },
+      }
+    }
   }
 }
 
 export class CheckboxElementType extends FormElementType {
-  getType() {
+  static getType() {
     return 'checkbox'
   }
 
@@ -1144,7 +1381,7 @@ export class CheckboxElementType extends FormElementType {
     return CheckboxElementForm
   }
 
-  get formDataType() {
+  formDataType(element) {
     return 'boolean'
   }
 
@@ -1163,7 +1400,7 @@ export class CheckboxElementType extends FormElementType {
 }
 
 export class IFrameElementType extends ElementType {
-  getType() {
+  static getType() {
     return 'iframe'
   }
 

@@ -3,7 +3,6 @@ import dataclasses
 from collections import defaultdict
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, TypeVar, Union
-from xmlrpc.client import Boolean
 from zipfile import ZipFile
 
 from django.core.files.storage import Storage
@@ -173,6 +172,20 @@ class Plugin(APIUrlsInstanceMixin, Instance):
         :param template: The template that is installed right after creating the
             account. Is `None` if the template was not created.
         :type template: Template or None
+        """
+
+    def create_initial_workspace(
+        self,
+        user: "AbstractUser",
+        workspace: "Workspace" = None,
+    ):
+        """
+        A hook that is called after a new initial workspace is created. This is the
+        place to create some data the user can start with.
+
+        :param user: The user that requested the new workspace.
+        :param workspace: The newly created workspace where the additional data must
+            be added to.
         """
 
     def user_signed_in(self, user):
@@ -533,8 +546,8 @@ class PermissionManagerType(abc.ABC, Instance):
         operation_name: str,
         workspace: Optional["Workspace"] = None,
         context: Optional[Any] = None,
-        include_trash: Boolean = False,
-    ) -> Optional[Boolean]:
+        include_trash: bool = False,
+    ) -> Optional[bool]:
         """
         This method is a helper to check permission with this permission manager when
         you need to do only one check. It calls `.check_multiple_permissions` behind
@@ -653,8 +666,6 @@ class PermissionManagerType(abc.ABC, Instance):
         :param workspace: An optional workspace into which the operation takes place.
         :return: The queryset potentially filtered.
         """
-
-        return queryset
 
     def get_roles(self) -> List:
         """
@@ -934,7 +945,7 @@ class ObjectScopeTypeRegistry(
         scope: ScopeObject,
         context: ContextObject,
         scope_type: Optional[ObjectScopeType] = None,
-    ) -> Boolean:
+    ) -> bool:
         """
         Checks whether a scope object includes the given context.
 
@@ -963,7 +974,7 @@ class ObjectScopeTypeRegistry(
         self,
         parent_scope_type: ObjectScopeType,
         child_scope_type: ObjectScopeType,
-    ) -> Boolean:
+    ) -> bool:
         """
         Checks whether the parent_scope includes the child_scope.
 

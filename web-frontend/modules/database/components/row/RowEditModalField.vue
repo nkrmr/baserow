@@ -1,12 +1,23 @@
 <template>
   <div class="control">
-    <label class="control__label">
+    <label class="control__label control__label--small">
       <a
         :class="{ 'row-modal__field-item-handle': sortable }"
         data-field-handle
       ></a>
-      <i class="control__label-icon" :class="field._.type.iconClass"></i>
+      <i :class="field._.type.iconClass"></i>
       {{ field.name }}
+      <span v-if="field.description" class="margin-left-1">
+        <HelpIcon
+          :tooltip="field.description || ''"
+          :tooltip-content-type="'plain'"
+          :tooltip-content-classes="[
+            'tooltip__content--expandable',
+            'tooltip__content--expandable-plain-text',
+          ]"
+          :icon="'info-empty'"
+        />
+      </span>
       <i
         v-if="!readOnly && canModifyFields"
         ref="contextLink"

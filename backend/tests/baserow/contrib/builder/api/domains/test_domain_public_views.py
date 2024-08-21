@@ -11,11 +11,17 @@ from rest_framework.status import (
     HTTP_404_NOT_FOUND,
 )
 
+from baserow.api.user_files.serializers import UserFileSerializer
+
 
 @pytest.mark.django_db
 def test_get_public_builder_by_domain_name(api_client, data_fixture):
     user, token = data_fixture.create_user_and_token()
-    builder_to = data_fixture.create_builder_application(workspace=None)
+    favicon_file = data_fixture.create_user_file(original_extension=".png")
+    builder_to = data_fixture.create_builder_application(
+        workspace=None,
+        favicon_file=favicon_file,
+    )
     page = data_fixture.create_builder_page(user=user, builder=builder_to)
     page2 = data_fixture.create_builder_page(user=user, builder=builder_to)
 
@@ -37,7 +43,12 @@ def test_get_public_builder_by_domain_name(api_client, data_fixture):
     response_json = response.json()
 
     assert response.status_code == HTTP_200_OK
+    assert response_json["theme"]["primary_color"] == "#5190efff"
+
+    del response_json["theme"]  # We are not testing the theme response here.
+
     assert response_json == {
+        "favicon_file": UserFileSerializer(builder_to.favicon_file).data,
         "id": builder_to.id,
         "name": builder_to.name,
         "pages": [
@@ -45,17 +56,6 @@ def test_get_public_builder_by_domain_name(api_client, data_fixture):
             {"id": page2.id, "name": page2.name, "path": page2.path, "path_params": []},
         ],
         "type": "builder",
-        "theme": {
-            "primary_color": "#5190efff",
-            "secondary_color": "#0eaa42ff",
-            "border_color": "#d7d8d9ff",
-            "heading_1_font_size": 24,
-            "heading_1_color": "#070810ff",
-            "heading_2_font_size": 20,
-            "heading_2_color": "#070810ff",
-            "heading_3_font_size": 16,
-            "heading_3_color": "#070810ff",
-        },
         "user_sources": [],
     }
 
@@ -116,7 +116,10 @@ def test_get_non_public_builder(api_client, data_fixture):
 @pytest.mark.django_db
 def test_get_public_builder_by_id(api_client, data_fixture):
     user, token = data_fixture.create_user_and_token()
+    favicon_file = data_fixture.create_user_file(original_extension=".png")
     page = data_fixture.create_builder_page(user=user)
+    page.builder.favicon_file = favicon_file
+    page.builder.save()
     page2 = data_fixture.create_builder_page(builder=page.builder, user=user)
 
     url = reverse(
@@ -133,7 +136,12 @@ def test_get_public_builder_by_id(api_client, data_fixture):
     response_json = response.json()
 
     assert response.status_code == HTTP_200_OK
+    assert response_json["theme"]["primary_color"] == "#5190efff"
+
+    del response_json["theme"]  # We are not testing the theme response here.
+
     assert response_json == {
+        "favicon_file": UserFileSerializer(page.builder.favicon_file).data,
         "id": page.builder.id,
         "name": page.builder.name,
         "pages": [
@@ -141,17 +149,6 @@ def test_get_public_builder_by_id(api_client, data_fixture):
             {"id": page2.id, "name": page2.name, "path": page2.path, "path_params": []},
         ],
         "type": "builder",
-        "theme": {
-            "primary_color": "#5190efff",
-            "secondary_color": "#0eaa42ff",
-            "border_color": "#d7d8d9ff",
-            "heading_1_font_size": 24,
-            "heading_1_color": "#070810ff",
-            "heading_2_font_size": 20,
-            "heading_2_color": "#070810ff",
-            "heading_3_font_size": 16,
-            "heading_3_color": "#070810ff",
-        },
         "user_sources": [],
     }
 

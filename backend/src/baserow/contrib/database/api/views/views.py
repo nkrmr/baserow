@@ -283,7 +283,6 @@ class ViewsView(APIView):
             ListViewsOperationType.type,
             workspace=table.database.workspace,
             context=table,
-            allow_if_template=True,
         )
 
         views = ViewHandler().list_views(
@@ -1008,13 +1007,13 @@ class ViewFilterGroupsView(APIView):
         },
     )
     @transaction.atomic
-    @validate_body(CreateViewFilterGroupSerializer)
     @map_exceptions(
         {
             ViewDoesNotExist: ERROR_VIEW_DOES_NOT_EXIST,
             UserNotInWorkspace: ERROR_USER_NOT_IN_GROUP,
         }
     )
+    @validate_body(CreateViewFilterGroupSerializer)
     def post(self, request, data, view_id):
         """Creates a new filter group for the provided view."""
 
@@ -1794,13 +1793,11 @@ class ViewFieldOptionsView(APIView):
         view = handler.get_view(view_id).specific
         view_type = view_type_registry.get_by_model(view)
         serializer_class = view_type.get_field_options_serializer_class()
-        data = validate_data(serializer_class, request.data)
+        data = validate_data(serializer_class, request.data, return_validated=True)
 
         with view_type.map_api_exceptions():
             action_type_registry.get_by_type(UpdateViewFieldOptionsActionType).do(
-                request.user,
-                view,
-                field_options=data["field_options"],
+                request.user, view, field_options=data
             )
 
         serializer = serializer_class(view)
@@ -1946,8 +1943,19 @@ class PublicViewLinkRowFieldLookupView(APIView):
         link_row_field = field_option.field.specific
         table = link_row_field.link_row_table
         primary_field = table.field_set.filter(primary=True).first()
-        model = table.get_model(fields=[primary_field], field_ids=[])
+        model = table.get_model()
         queryset = model.objects.all().enhance_by_fields()
+
+        # If the link row field is limited to a specific view, then we must
+        # apply those filters to prevent leaking rows that don't match those filters.
+        if link_row_field.link_row_limit_selection_view_id is not None:
+            view_handler = ViewHandler()
+            limit_selection_specific_view = (
+                link_row_field.link_row_limit_selection_view.specific
+            )
+            queryset = view_handler.apply_filters(
+                limit_selection_specific_view, queryset
+            )
 
         # If the view type needs the link row values to be restricted, we must figure
         # out which relations the view actually has to figure so that we can restrict
@@ -1969,7 +1977,11 @@ class PublicViewLinkRowFieldLookupView(APIView):
             queryset = queryset.filter(id__in=view_queryset)
 
         if search:
-            queryset = queryset.search_all_fields(search, search_mode=search_mode)
+            queryset = queryset.search_all_fields(
+                search,
+                search_mode=search_mode,
+                only_search_by_field_ids=[primary_field.id],
+            )
 
         paginator = PageNumberPagination(limit_page_size=settings.ROW_PAGE_SIZE_LIMIT)
         page = paginator.paginate_queryset(queryset, request, self)

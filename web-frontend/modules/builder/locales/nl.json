@@ -33,7 +33,8 @@
         "themeName": "Thema",
         "integrationsName": "Integraties",
         "domainsName": "Domeinen",
-        "userSourcesName": "Gebruikers"
+        "userSourcesName": "Gebruikers",
+        "generalName": "Algemeen"
     },
     "elementMenu": {
         "moveUp": "Verplaats omhoog",
@@ -78,14 +79,19 @@
         "checkboxDescription": "Checkbox element",
         "iframe": "IFrame",
         "authForm": "Inlogformulier",
-        "authFormDescription": "Een login formulier voor gebruikers"
+        "authFormDescription": "Een login formulier voor gebruikers",
+        "repeat": "Herhaal",
+        "repeatDescription": "Een herhaalbare reeks elementen",
+        "choice": "Keuze",
+        "choiceDescription": "Voor enkele/meervoudige waarde selectie"
     },
     "addElementButton": {
         "label": "Element"
     },
     "addElementModal": {
         "title": "Nieuw element toevoegen",
-        "searchPlaceholder": "Zoek elementen"
+        "searchPlaceholder": "Zoek elementen",
+        "disabledElementTooltip": "Niet beschikbaar binnen dit element"
     },
     "duplicatePageJobType": {
         "duplicating": "Dupliceren",
@@ -276,7 +282,9 @@
         "dataSource": "Data",
         "formData": "Formuliergegevens",
         "user": "Gebruiker",
-        "previousAction": "Vorige actie"
+        "previousAction": "Vorige actie",
+        "dataSourceContext": "Beschikbare opties",
+        "metadata": "Metadata"
     },
     "tableElementForm": {
         "addField": "veld toevoegen",
@@ -289,7 +297,13 @@
         "itemsPerPagePlaceholder": "Waarde invoeren...",
         "fields": "Velden",
         "selectSourceFirst": "Kies een lijstgegevensbron om te beginnen met het configureren van je velden.",
-        "buttonColor": "Kleur knop"
+        "buttonColor": "Kleur knop",
+        "refreshFieldsFromDataSource": "velden van gegevensbron verversen",
+        "name": "Naam",
+        "orientation": "Oriëntatie",
+        "orientationHorizontal": "Horizontaal",
+        "orientationVertical": "Verticaal",
+        "buttonLoadMoreLabel": "Toon meer label"
     },
     "linkFieldForm": {
         "fieldLinkNamePlaceholder": "Waarde invoeren...",
@@ -317,7 +331,9 @@
         "backgroundColor": "Achtergrond kleur",
         "boxBottom": "Onderkant",
         "boxRight": "Rechts",
-        "boxLeft": "Links"
+        "boxLeft": "Links",
+        "backgroundImage": "Afbeelding",
+        "backgroundImageMode": "Vulmodus"
     },
     "updateUserSourceForm": {
         "nameFieldLabel": "Naam",
@@ -349,7 +365,11 @@
         "validationTypeEmailLabel": "E-mail",
         "validationTypeEmailDescription": "Dwing een e-mailadres waarde af in deze invoer.",
         "validationTypeAnyDescription": "Sta toe dat deze invoer een willekeurige waarde bevat.",
-        "validationTypeIntegerDescription": "Dwing een getalwaarde af in deze invoer."
+        "validationTypeIntegerDescription": "Dwing een getalwaarde af in deze invoer.",
+        "inputTypePasswordLabel": "Wachtwoord",
+        "passwordTypeWarning": "Wachtwoorden zijn gevoelige gegevens. Wees voorzichtig met hoe je wachtwoorden behandelt en opslaat in je applicatie.",
+        "inputType": "Input type",
+        "inputTypeTextLabel": "Tekst"
     },
     "widthSelector": {
         "widthFull": "Volledige breedte",
@@ -366,13 +386,16 @@
         "createRowLabel": "Rij maken",
         "notificationLabel": "Melding tonen",
         "openPageLabel": "Pagina openen",
-        "logoutLabel": "Uitloggen"
+        "logoutLabel": "Uitloggen",
+        "refreshDataSourceLabel": "Gegevensbron verversen"
     },
     "widthTypes": {
         "full": "Volledige breedte",
         "small": "Klein",
         "medium": "Medium",
-        "normal": "Normaal"
+        "normal": "Normaal",
+        "fullBleed": "Full bleed",
+        "fullWidth": "Volledige breedte"
     },
     "userSourceSettings": {
         "titleOverview": "Gebruiker bronnen",
@@ -395,7 +418,8 @@
         "columnGapPlaceholder": "Voer ruimte in tussen kolommen...",
         "columnGapTitle": "Ruimte tussen kolommen",
         "columnAmountTitle": "Layout",
-        "columnAmountName": "geen kolommen | 1 kolom | {columnAmount} kolommen"
+        "columnAmountName": "geen kolommen | 1 kolom | {columnAmount} kolommen",
+        "verticalAlignment": "Verticale uitlijning"
     },
     "notificationWorkflowActionForm": {
         "descriptionLabel": "Beschrijving",
@@ -423,7 +447,9 @@
     },
     "collectionFieldType": {
         "text": "Tekst",
-        "link": "Link"
+        "link": "Link",
+        "boolean": "Boolean",
+        "tags": "Tags"
     },
     "createUserSourceForm": {
         "userSourceName": "Naam",
@@ -453,7 +479,9 @@
     "styleBoxForm": {
         "borderLabel": "Grens",
         "paddingLabel": "Opvulling",
-        "error": "De waarde moet een geheel getal zijn tussen 0 en 200."
+        "error": "De waarde moet een geheel getal zijn tussen 0 en 200.",
+        "borderColor": "Kleur rand",
+        "marginLabel": "Marge"
     },
     "backgroundTypes": {
         "color": "Kleur",
@@ -500,7 +528,10 @@
         "paramPlaceholder": "Voer een waarde in...",
         "url": "Bestemmings URL",
         "paramsInErrorDescription": "De opgeslagen parameters komen niet overeen met de paginaparameters. De pagina is waarschijnlijk verwijderd of bijgewerkt.",
-        "paramsInErrorButton": "Parameters bijwerken"
+        "paramsInErrorButton": "Parameters bijwerken",
+        "target": "Open in...",
+        "targetSelf": "Zelfde tab",
+        "targetNewTab": "Nieuw tabblad"
     },
     "iframeElementForm": {
         "empty": "Leeg IFrame...",
@@ -546,7 +577,8 @@
     },
     "userSelector": {
         "viewAs": "Weergeven als: {user}",
-        "anonymous": "Anoniem"
+        "anonymous": "Anoniem",
+        "member": "{prefix} lid"
     },
     "formContainerElement": {
         "submitDeactivatedText": "Vul alle verplichte velden in om te verzenden"
@@ -554,6 +586,180 @@
     "visibilityForm": {
         "allVisitors": "Alle bezoekers",
         "loggedInVisitors": "Aangemelde bezoekers",
-        "notLoggedInVisitors": "Uitgelogde bezoekers"
+        "notLoggedInVisitors": "Uitgelogde bezoekers",
+        "warningMessage": "Op dit moment wordt de zichtbaarheid alleen toegepast in de UI, de onderliggende gegevens zijn nog steeds toegankelijk via de API. Raadpleeg de <a href='https://baserow.io/user-docs/application-builder-element-visibility#note-accessing-hidden-data-via-api'>documentatie</a> voor meer informatie over gegevensbeveiliging.",
+        "warningTitle": "We verbeteren voortdurend de beveiliging",
+        "excludedRolesLabel": "alle rollen behalve",
+        "switchAllowLabel": "Sta toe",
+        "switchDisallowLabel": "Niet toestaan",
+        "rolesSelectAll": "Selecteer alles",
+        "rolesDeselectAll": "Deselecteer alles",
+        "rolesSelectHint": "Selecteer een of meer rollen",
+        "roleTypesHint": "Selecteer een type rol",
+        "roleTypeAllowAllRoles": "Alle rollen",
+        "roleTypeAllowAllRolesExcept": "Rollen niet toestaan...",
+        "roleTypeDisallowAllRolesExcept": "Rollen toestaan...",
+        "rolesAllMembersOf": "Alle leden van {name}",
+        "noRole": "Geen rol",
+        "errorFetchingRolesTitle": "Kan gebruikersrollen niet ophalen",
+        "errorFetchingRolesMessage": "Er is een probleem opgetreden tijdens het ophalen van gebruikersrollen."
+    },
+    "imageInput": {
+        "labelButton": "Uploaden",
+        "labelDescription": "Standaard beschrijving"
+    },
+    "generalSettings": {
+        "labelForm": "Favicon",
+        "labelDescription": "Kies een 128x128px ICO, PNG, GIF of JPEG.",
+        "labelButton": "Favicon uploaden",
+        "cantUploadFaviconTitle": "Kon favicon bestand niet uploaden",
+        "cantUploadFaviconDescription": "Sorry, kon favicon afbeelding niet uploaden. Zorg ervoor dat het afbeeldingsbestand uniek is en een ondersteund afbeeldingsformaat heeft.",
+        "cantUpdateApplicationTitle": "Applicatie kan niet worden bijgewerkt",
+        "cantUpdateApplicationDescription": "Sorry, kon de applicatie niet bijwerken.",
+        "titleOverview": "Algemeen"
+    },
+    "repeatElementForm": {
+        "dataSource": "Gegevensbron",
+        "itemsPerRowDescription": "Kies per apparaattype wat het aantal herhalingen per rij moet zijn.",
+        "orientationVertical": "Verticaal",
+        "orientationLabel": "Oriëntatie",
+        "orientationHorizontal": "Horizontaal",
+        "itemsPerPage": "Items per pagina",
+        "itemsPerPagePlaceholder": "Waarde invoeren...",
+        "itemsPerRowLabel": "Items per rij",
+        "buttonLoadMoreLabel": "Toon meer label"
+    },
+    "userDataProviderType": {
+        "isAuthenticated": "Is ingelogd",
+        "id": "Id",
+        "email": "E-mail",
+        "username": "Gebruikersnaam",
+        "role": "Rol"
+    },
+    "buttonField": {
+        "noLabel": "Naamloos..."
+    },
+    "repeatElement": {
+        "showMore": "Meer tonen",
+        "missingDataSourceTooltip": "Kies een gegevensbron om te beginnen met het toevoegen van elementen.",
+        "empty": "Er zijn geen items gevonden."
+    },
+    "tagsFieldForm": {
+        "fieldValuesLabel": "Waarden",
+        "fieldValuesPlaceholder": "Waarden invoeren...",
+        "fieldColorsLabel": "Kleuren",
+        "fieldColorsPlaceholder": "Voer kleuren in..."
+    },
+    "buttonFieldForm": {
+        "infoMessage": "Om acties voor deze knop te configureren, open je het tabblad \"Gebeurtenissen\" van het huidige element.",
+        "labelPlaceholder": "Voer een label in..."
+    },
+    "themeConfigBlockType": {
+        "color": "Kleuren",
+        "page": "Pagina",
+        "typography": "Typografie",
+        "link": "Link",
+        "button": "Knop",
+        "image": "Afbeelding"
+    },
+    "buttonThemeConfigBlock": {
+        "defaultState": "Standaard staat",
+        "hoverState": "Hover staat",
+        "textAlignment": "Tekstuitlijning",
+        "alignment": "Uitlijning",
+        "width": "Breedte",
+        "textColor": "Kleur tekst",
+        "borderColor": "Border kleur",
+        "borderSize": "Bordergrootte",
+        "borderRadius": "Border radius",
+        "padding": "Opvulling",
+        "fontFamily": "Lettertype",
+        "size": "Lettergrootte",
+        "backgroundColor": "Achtergrond kleur",
+        "button": "Knop"
+    },
+    "linkThemeConfigBlock": {
+        "color": "Kleur",
+        "link": "Link",
+        "defaultState": "Standaard staat",
+        "hoverState": "Hover staat",
+        "alignment": "Uitlijning",
+        "fontFamily": "Lettertype"
+    },
+    "imageThemeConfigBlock": {
+        "alignment": "Uitlijning",
+        "maxWidthLabel": "Max breedte",
+        "maxHeightLabel": "Max hoogte",
+        "imageConstraintsLabel": "Beperkingen",
+        "imageConstraintCover": "Omslag",
+        "imageConstraintCoverDisabled": "Niet beschikbaar met lege maximumhoogte.",
+        "imageConstraintContain": "Bevat",
+        "imageConstraintContainDisabled": "Niet beschikbaar met een maximale hoogte.",
+        "maxWidthPlaceholder": "Voer een maximale breedte in",
+        "maxHeightPlaceholder": "Maximale hoogte invoeren",
+        "imageConstraintFullWidth": "Uitbreiden tot max breedte"
+    },
+    "choiceElementForm": {
+        "multiple": "Meerdere waarden toestaan",
+        "display": "Weergave",
+        "dropdown": "Dropdown",
+        "checkbox": "Checkbox",
+        "radio": "Radio"
+    },
+    "choiceOptionSelector": {
+        "name": "Optie waargave namen",
+        "namePlaceholder": "Naam invoeren",
+        "addOption": "optie toevoegen",
+        "manual": "Handmatig",
+        "dataSource": "Gegevensbron",
+        "formulas": "Formules",
+        "optionType": "Opties type",
+        "label": "Opties",
+        "value": "Optiewaarden",
+        "valuePlaceholder": "Waarde invoeren"
+    },
+    "choiceElement": {
+        "addOptions": "Opties toevoegen om dit element te gaan gebruiken..."
+    },
+    "backgroundModes": {
+        "tile": "Tegel",
+        "fill": "Vullen",
+        "fit": "Pas"
+    },
+    "customStyle": {
+        "themeOverrides": "Thema overschrijvingen"
+    },
+    "colorThemeConfigBlock": {
+        "errorColor": "Fout",
+        "successColor": "Succes",
+        "secondaryColor": "Secundair",
+        "borderColor": "Border",
+        "warningColor": "Waarschuwing",
+        "primaryColor": "Primair"
+    },
+    "colorThemeConfigBlockType": {
+        "secondary": "Secundair",
+        "success": "Succes",
+        "warning": "Waarschuwing",
+        "error": "Fout",
+        "primary": "Primair",
+        "border": "Border"
+    },
+    "pageThemeConfigBlock": {
+        "backgroundColor": "Achtergrond kleur",
+        "backgroundImage": "Achtergrondafbeelding",
+        "backgroundMode": "Achtergrondmodus"
+    },
+    "typographyThemeConfigBlock": {
+        "size": "Maat",
+        "textAlignment": "Uitlijning",
+        "headingLabel": "Kop {i} (h{i})",
+        "headingValue": "Kop <h{i}>",
+        "color": "Kleur",
+        "fontFamily": "Lettertype",
+        "bodyLabel": "Body"
+    },
+    "resetButton": {
+        "reset": "Terugzetten naar standaard themawaarde"
     }
 }

@@ -14,6 +14,7 @@
             'grid-field-link-row__unnamed':
               item.value === null || item.value === '',
           }"
+          :title="item.value"
         >
           {{
             item.value || $t('gridViewFieldLinkRow.unnamed', { value: item.id })
@@ -43,6 +44,7 @@
       v-if="canAccessLinkedTable"
       ref="selectModal"
       :table-id="field.link_row_table_id"
+      :view-id="field.link_row_limit_selection_view_id"
       :value="value"
       @selected="addValue(value, $event)"
       @hidden="hideModal"

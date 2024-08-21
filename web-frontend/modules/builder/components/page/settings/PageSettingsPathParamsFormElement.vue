@@ -1,16 +1,5 @@
 <template>
-  <div>
-    <label class="control__label">
-      {{ $t('pageForm.pathParamsTitle') }}
-    </label>
-    <div class="control__description">
-      <template v-if="Object.keys(pathParams).length > 0">
-        {{ $t('pageForm.pathParamsSubtitle') }}
-      </template>
-      <template v-else>
-        {{ $t('pageForm.pathParamsSubtitleTutorial') }}
-      </template>
-    </div>
+  <FormGroup small-label :label="$t('pageForm.pathParamsTitle')" required>
     <div
       v-for="pathParam in pathParams"
       :key="pathParam.name"
@@ -21,6 +10,7 @@
         <Dropdown
           :value="pathParam.type"
           small
+          :disabled="disabled"
           @input="$emit('update', pathParam.name, $event)"
         >
           <DropdownItem
@@ -32,7 +22,16 @@
         </Dropdown>
       </div>
     </div>
-  </div>
+
+    <template #helper>
+      <template v-if="Object.keys(pathParams).length > 0">
+        {{ $t('pageForm.pathParamsSubtitle') }}
+      </template>
+      <template v-else>
+        {{ $t('pageForm.pathParamsSubtitleTutorial') }}
+      </template>
+    </template>
+  </FormGroup>
 </template>
 
 <script>
@@ -43,6 +42,11 @@ export default {
       type: Array,
       required: false,
       default: () => {},
+    },
+    disabled: {
+      type: Boolean,
+      required: false,
+      default: false,
     },
   },
   computed: {

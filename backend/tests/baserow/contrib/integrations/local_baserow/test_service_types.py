@@ -7,7 +7,6 @@ import pytest
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema_field
 from rest_framework.exceptions import ValidationError
-from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.fields import (
     BooleanField,
     CharField,
@@ -131,11 +130,15 @@ def test_export_import_local_baserow_list_rows_service(data_fixture):
         view=view,
         table=view.table,
         search_query="get('page_parameter.id')",
+        filter_type="Or",
     )
 
     field = fields[0]
     service_filter = data_fixture.create_local_baserow_table_service_filter(
-        service=service, field=field, value="get('page_parameter.filter')", order=0
+        service=service,
+        field=field,
+        value="get('page_parameter.filter')",
+        order=0,
     )
     service_sort = data_fixture.create_local_baserow_table_service_sort(
         service=service, field=field, order_by=SORT_ORDER_ASC, order=0
@@ -150,6 +153,7 @@ def test_export_import_local_baserow_list_rows_service(data_fixture):
         "table_id": service.table_id,
         "integration_id": service.integration_id,
         "search_query": service.search_query,
+        "filter_type": "Or",
         "filters": [
             {
                 "field_id": service_filter.field_id,
@@ -175,6 +179,7 @@ def test_export_import_local_baserow_list_rows_service(data_fixture):
     assert service.id != exported["id"]
     assert service.view_id == exported["view_id"]
     assert service.table_id == exported["table_id"]
+    assert service.filter_type == exported["filter_type"]
     assert service.search_query == exported["search_query"]
     assert service.integration_id == exported["integration_id"]
     assert isinstance(service, service_type.model_class)
@@ -405,6 +410,7 @@ def test_export_import_local_baserow_get_row_service(data_fixture):
         view=view,
         table=view.table,
         search_query="get('page_parameter.id')",
+        filter_type="Or",
     )
     service_filter = data_fixture.create_local_baserow_table_service_filter(
         service=service, field=field, value="get('page_parameter.filter')", order=0
@@ -420,6 +426,7 @@ def test_export_import_local_baserow_get_row_service(data_fixture):
         "table_id": service.table_id,
         "integration_id": service.integration_id,
         "search_query": service.search_query,
+        "filter_type": "Or",
         "filters": [
             {
                 "field_id": service_filter.field_id,
@@ -440,6 +447,7 @@ def test_export_import_local_baserow_get_row_service(data_fixture):
     assert service.row_id == exported["row_id"]
     assert service.view_id == exported["view_id"]
     assert service.table_id == exported["table_id"]
+    assert service.filter_type == exported["filter_type"]
     assert service.search_query == exported["search_query"]
     assert service.integration_id == exported["integration_id"]
     assert isinstance(service, service_type.model_class)
@@ -1093,6 +1101,17 @@ def test_local_baserow_list_rows_service_dispatch_data_with_pagination(
 
 
 @pytest.mark.django_db
+def test_local_baserow_list_rows_service_import_context_path(data_fixture):
+    local_baserow_list_rows_service = LocalBaserowListRowsUserServiceType()
+
+    assert local_baserow_list_rows_service.import_context_path([], {}) == []
+    assert local_baserow_list_rows_service.import_context_path(["id"], {}) == ["id"]
+    assert local_baserow_list_rows_service.import_context_path(
+        ["field_1", "value"], {"database_fields": {1: 2}}
+    ) == ["field_2", "value"]
+
+
+@pytest.mark.django_db
 def test_local_baserow_table_service_before_dispatch_validation_error(
     data_fixture,
 ):
@@ -1633,6 +1652,20 @@ def test_local_baserow_table_service_generate_schema_with_interesting_test_table
             "metadata": {},
             "type": "string",
         },
+        field_db_column_by_name["duration_rollup_sum"]: {
+            "default": None,
+            "metadata": {},
+            "original_type": "rollup",
+            "title": "duration_rollup_sum",
+            "type": "string",
+        },
+        field_db_column_by_name["duration_rollup_avg"]: {
+            "default": None,
+            "metadata": {},
+            "original_type": "rollup",
+            "title": "duration_rollup_avg",
+            "type": "string",
+        },
         field_db_column_by_name["lookup"]: {
             "title": "lookup",
             "default": None,
@@ -1902,6 +1935,120 @@ def test_local_baserow_table_service_type_after_update_table_change_deletes_filt
 
 
 @pytest.mark.django_db
+def test_local_baserow_table_service_type_get_context_data(data_fixture):
+    user = data_fixture.create_user()
+    page = data_fixture.create_builder_page(user=user)
+    database = data_fixture.create_database_application(
+        workspace=page.builder.workspace
+    )
+    integration = data_fixture.create_local_baserow_integration(
+        application=page.builder, user=user
+    )
+    table = TableHandler().create_table_and_fields(
+        user=user,
+        database=database,
+        name=data_fixture.fake.name(),
+        fields=[
+            ("Ingredient", "text", {}),
+        ],
+    )
+    field_handler = FieldHandler()
+    field = field_handler.create_field(
+        user=user,
+        table=table,
+        type_name="single_select",
+        name="Category",
+        select_options=[
+            {
+                "value": "Bakery",
+                "color": "red",
+            },
+            {
+                "value": "Grocery",
+                "color": "green",
+            },
+        ],
+    )
+
+    service_type = LocalBaserowGetRowUserServiceType()
+    service = data_fixture.create_local_baserow_upsert_row_service(
+        integration=integration,
+        table=table,
+    )
+
+    context_data = service_type.get_context_data(service)
+
+    # The first field is a text field, so we ignore it when generating the schema
+    assert "field_1" not in context_data
+
+    # The second field should contain all the available select options
+    assert context_data[f"field_{field.id}"] == list(
+        field.select_options.values("id", "color", "value")
+    )
+
+
+@pytest.mark.django_db
+def test_local_baserow_table_service_type_get_context_data_schema(data_fixture):
+    user = data_fixture.create_user()
+    page = data_fixture.create_builder_page(user=user)
+    database = data_fixture.create_database_application(
+        workspace=page.builder.workspace
+    )
+    integration = data_fixture.create_local_baserow_integration(
+        application=page.builder, user=user
+    )
+    table = TableHandler().create_table_and_fields(
+        user=user,
+        database=database,
+        name=data_fixture.fake.name(),
+        fields=[("Ingredient", "text", {})],
+    )
+    field_handler = FieldHandler()
+    field = field_handler.create_field(
+        user=user,
+        table=table,
+        type_name="single_select",
+        name="Category",
+        select_options=[
+            {
+                "value": "Bakery",
+                "color": "red",
+            },
+            {
+                "value": "Grocery",
+                "color": "green",
+            },
+        ],
+    )
+
+    service_type = LocalBaserowGetRowUserServiceType()
+    service = data_fixture.create_local_baserow_upsert_row_service(
+        integration=integration,
+        table=table,
+    )
+
+    schema = service_type.get_context_data_schema(service)
+
+    # The first field is a text field, so we ignore it when generating the schema
+    assert "field_1" not in schema["properties"]
+
+    # The second field should have the JSON schema with the available choices
+    assert schema["properties"][f"field_{field.id}"] == {
+        "type": "array",
+        "title": "Category",
+        "default": None,
+        "items": {
+            "type": "object",
+            "properties": {
+                "value": {"type": "string"},
+                "id": {"type": "number"},
+                "color": {"type": "string"},
+            },
+        },
+    }
+
+
+@pytest.mark.django_db
 def test_local_baserow_upsert_row_service_dispatch_data_without_row_id(
     data_fixture,
 ):
@@ -1995,6 +2142,80 @@ def test_local_baserow_upsert_row_service_dispatch_data_with_row_id(
 
     row.refresh_from_db()
     assert getattr(row, cost.db_column) == fake_request.data["page_parameter"]["id"]
+
+    # Same test but the page parameter is a string instead.
+    fake_request.data = {"page_parameter": {"id": "10"}}
+    dispatch_values = service_type.resolve_service_formulas(service, dispatch_context)
+    dispatch_data = service_type.dispatch_data(
+        service, dispatch_values, dispatch_context
+    )
+
+    assert getattr(dispatch_data["data"], cost.db_column) == int(
+        fake_request.data["page_parameter"]["id"]
+    )
+
+    row.refresh_from_db()
+    assert getattr(row, cost.db_column) == int(
+        fake_request.data["page_parameter"]["id"]
+    )
+
+
+@pytest.mark.django_db
+def test_local_baserow_upsert_row_service_dispatch_data_with_multiple_formulas(
+    data_fixture,
+):
+    user = data_fixture.create_user()
+    builder = data_fixture.create_builder_application(user=user)
+    page = data_fixture.create_builder_page(builder=builder)
+    integration = data_fixture.create_local_baserow_integration(
+        application=builder, user=user, authorized_user=user
+    )
+    database = data_fixture.create_database_application(workspace=builder.workspace)
+    table = TableHandler().create_table_and_fields(
+        user=user,
+        database=database,
+        name=data_fixture.fake.name(),
+        fields=[
+            ("Cost", "number", {}),
+            ("Name", "text", {}),
+        ],
+    )
+    cost = table.field_set.get(name="Cost")
+    name = table.field_set.get(name="Name")
+    row = RowHandler().create_row(
+        user=user,
+        table=table,
+        values={cost.db_column: 5, name.db_column: "test"},
+    )
+
+    data_source = data_fixture.create_builder_local_baserow_get_row_data_source(
+        page=page, table=table, integration=integration
+    )
+
+    service = data_fixture.create_local_baserow_upsert_row_service(
+        table=table,
+        row_id=f'get("data_source.{data_source.id}.id")',
+        integration=integration,
+    )
+    service_type = service.get_type()
+    service.field_mappings.create(
+        field=cost, value=f'get("data_source.{data_source.id}.{cost.db_column}")'
+    )
+    service.field_mappings.create(
+        field=name, value=f'get("data_source.{data_source.id}.{name.db_column}")'
+    )
+
+    fake_request = Mock()
+    fake_request.data = {"page_parameter": {"id": 10}}
+
+    dispatch_context = BuilderDispatchContext(fake_request, page)
+    dispatch_values = service_type.resolve_service_formulas(service, dispatch_context)
+    dispatch_data = service_type.dispatch_data(
+        service, dispatch_values, dispatch_context
+    )
+
+    row.refresh_from_db()
+    assert getattr(row, cost.db_column) == 5
 
 
 @pytest.mark.django_db
@@ -2151,7 +2372,7 @@ def test_local_baserow_upsert_row_service_dispatch_data_incompatible_value(
     dispatch_context = BuilderDispatchContext(Mock(), page)
 
     field_mapping = service.field_mappings.create(field=boolean_field, value="'Horse'")
-    with pytest.raises(DRFValidationError) as exc:
+    with pytest.raises(ServiceImproperlyConfigured) as exc:
         service_type.dispatch_data(
             service, {"table": table, field_mapping.id: "Horse"}, dispatch_context
         )

@@ -1,4 +1,5 @@
 from collections import defaultdict
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -7,6 +8,7 @@ from baserow.contrib.builder.workflow_actions.registries import (
     builder_workflow_action_type_registry,
 )
 from baserow.contrib.builder.workflow_actions.workflow_action_types import (
+    RefreshDataSourceWorkflowAction,
     UpsertRowWorkflowActionType,
 )
 from baserow.core.utils import MirrorDict
@@ -54,17 +56,21 @@ def test_import_workflow_action(data_fixture, workflow_action_type: WorkflowActi
     pytest_params = workflow_action_type.get_pytest_params(data_fixture)
 
     page_after_import = data_fixture.create_builder_page()
+    element = data_fixture.create_builder_button_element(page=page_after_import)
 
     serialized = {
         "id": 9999,
         "type": workflow_action_type.type,
-        "page_id": page.id,
+        "page_id": 41,
+        "element_id": 42,
         "order": 0,
     }
     serialized.update(workflow_action_type.get_pytest_params_serialized(pytest_params))
 
-    id_mapping = defaultdict(lambda: MirrorDict())
-    id_mapping["builder_pages"] = {page.id: page_after_import.id}
+    id_mapping = defaultdict(MirrorDict)
+    id_mapping["builder_pages"] = {41: page_after_import.id}
+    id_mapping["builder_page_elements"] = {42: element.id}
+
     workflow_action = workflow_action_type.import_serialized(
         page, serialized, id_mapping
     )
@@ -183,3 +189,71 @@ def test_upsert_row_workflow_action_prepare_values_with_instance(
     assert service.row_id == row2.id
     assert service.table_id == table.id
     assert service.integration_id == integration.id
+
+
+@patch(
+    "baserow.contrib.builder.workflow_actions.workflow_action_types.BuilderWorkflowActionType.deserialize_property"
+)
+def test_refresh_data_source_returns_value_from_id_mapping(mock_deserialize):
+    """
+    Ensure value is returned from id_mapping if prop_name is 'data_source_id'
+    and a value is provided.
+    """
+
+    action = RefreshDataSourceWorkflowAction()
+    mock_result = MagicMock()
+    id_mapping = {"builder_data_sources": {"1": mock_result}}
+
+    result = action.deserialize_property(
+        "data_source_id",
+        "1",
+        id_mapping,
+    )
+
+    assert result is mock_result
+    mock_deserialize.assert_not_called()
+
+
+@patch(
+    "baserow.contrib.builder.workflow_actions.workflow_action_types.BuilderWorkflowActionType.deserialize_property"
+)
+@pytest.mark.parametrize(
+    "value,id_mapping",
+    [
+        # Both value and id_mapping are empty
+        (
+            "",
+            {},
+        ),
+        # id_mapping is valid but value is empty
+        (
+            "",
+            {
+                "builder_data_sources": {"foo": "bar"},
+            },
+        ),
+        # value is valid but id_mapping doesn't have matching value
+        (
+            "foo",
+            {
+                "builder_data_sources": {"baz": "bar"},
+            },
+        ),
+    ],
+)
+def test_refresh_data_source_returns_value_from_super_method(
+    mock_deserialize, value, id_mapping
+):
+    """Ensure value is returned from the parent class' deserialize_property method."""
+
+    mock_result = MagicMock()
+    mock_deserialize.return_value = mock_result
+    action = RefreshDataSourceWorkflowAction()
+
+    args = ["data_source_id", value, id_mapping]
+    result = action.deserialize_property(*args)
+
+    assert result is mock_result
+    mock_deserialize.assert_called_once_with(
+        *args, files_zip=None, cache=None, storage=None
+    )

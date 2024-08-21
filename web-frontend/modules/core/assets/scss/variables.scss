@@ -25,6 +25,9 @@ $z-index-tooltip: 8 !default;
 // and must always be visible.
 $z-index-toasts: 9 !default;
 
+// This is an overlay over all element, so it must be the highest.
+$z-index-highlight-overlay: 100 !default;
+
 // normalize overrides
 $base-font-family: $text-font-stack !default;
 
@@ -54,6 +57,8 @@ $file-field-modal-head-height: 62px !default;
 $file-field-modal-body-nav-width: 120px !default;
 $file-field-modal-foot-height: 108px !default;
 
+$onboarding-breakpoint: 920px !default;
+
 $dashboard-breakpoint: 1100px;
 
 $builder-page-max-width: 1280px;
@@ -64,11 +69,11 @@ $baserow-icon-prefix: 'baserow-icon-';
 // This list must contain all the svg icons in the `modules/core/assets/icons` that must
 // automatically become under `baserow-icon-$icon`. All the icons must be designed on a
 // 24px by 24px grid.
-$baserow-icons: 'circle-empty', 'circle-checked', 'formula', 'hashtag',
-  'more-horizontal', 'more-vertical', 'reddit', 'single-select', 'twitter',
-  'lock-open', 'flag', 'heart', 'star', 'thumbs-up', 'history', 'facebook',
-  'linkedin', 'gitlab', 'file-csv', 'file-pdf', 'file-image', 'file-audio',
-  'file-video', 'file-code', 'tablet', 'form', 'file-excel', 'kanban',
-  'file-word', 'file-archive', 'gallery', 'file-powerpoint', 'calendar', 'smile',
-  'smartphone', 'plus', 'heading-1', 'heading-2', 'heading-3', 'paragraph',
-  'ordered-list', 'enlarge';
+$baserow-icons: 'circle-empty', 'circle-checked', 'check-square', 'formula',
+  'hashtag', 'more-horizontal', 'more-vertical', 'reddit', 'single-select',
+  'twitter', 'lock-open', 'flag', 'heart', 'star', 'thumbs-up', 'history',
+  'facebook', 'linkedin', 'gitlab', 'file-csv', 'file-pdf', 'file-image',
+  'file-audio', 'file-video', 'file-code', 'tablet', 'form', 'file-excel',
+  'kanban', 'file-word', 'file-archive', 'gallery', 'file-powerpoint',
+  'calendar', 'smile', 'smartphone', 'plus', 'heading-1', 'heading-2',
+  'heading-3', 'paragraph', 'ordered-list', 'enlarge', 'settings';

@@ -30,12 +30,12 @@
   flex-direction: column;
   gap: 10px;
 
-  &--with-padding {
-    padding: 16px 8px 10px 10px;
-  }
-
   &--scrollable {
     overflow-y: scroll;
+  }
+
+  &--with-padding {
+    padding: 16px 8px 10px;
   }
 }
 
@@ -43,8 +43,8 @@
   display: grid;
   align-items: center;
   grid-template-columns: 68px 1fr;
-  margin-left: 5px;
-  column-gap: 10px;
+  column-gap: 4px;
+
   @include rounded($rounded);
 
   &.filters__item--level-1 {
@@ -57,20 +57,28 @@
 .filters__group-item-wrapper {
   display: grid;
   grid-template-columns: 68px 1fr;
-  column-gap: 10px;
-  margin-left: 5px;
+  column-gap: 4px;
   align-items: baseline;
 }
 
 .filters__group-item {
   background-color: $color-neutral-100;
-  border-radius: 6px;
+  border-radius: 4px;
   border: 1px solid $color-neutral-200;
+  padding: 10px 6px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.filters__group-item-wrapper--inner {
+  .filters__group-item {
+    background-color: #ebebeb;
+  }
 }
 
 .filters__group-item-filters {
   min-height: 20px;
-  padding: 8px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -78,8 +86,9 @@
 
 .filters__group-item-actions {
   border-top: 1px solid rgba(217, 219, 222, 0.5);
-  padding: 8px 16px;
+  padding: 8px 6px;
   display: flex;
+  gap: 16px;
 }
 
 .filters__remove {
@@ -93,8 +102,8 @@
   height: 36px;
   justify-content: center;
 
-  @include add-elevation($elevation-low);
-  @include flex-align-items();
+  @include elevation($elevation-low);
+  @include flex-align-items;
 
   &:hover {
     text-decoration: none;
@@ -125,33 +134,28 @@
   margin-left: 12px;
 }
 
-.filters__value {
-  flex: 0 0;
-}
-
 .filters__multi-value {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 4px;
   flex-direction: row;
 }
 
-.filters__value-input {
-  padding-top: 0;
-  padding-bottom: 0;
-  line-height: 36px;
+.filters__multi-value-operator {
+  max-width: 144px;
 }
 
-.filters__combined_value-input {
+.filters__combined-value-input {
   &.filters__value-input--small {
     width: 50px;
+    text-align: center;
   }
 }
 
 .filters__value-date-timezone {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   flex-direction: row;
 }
 
@@ -163,8 +167,9 @@
 .filters__value-rating {
   border: solid 1px $palette-neutral-400;
   padding: 6px 12px;
+
   @include rounded($rounded);
-  @include add-elevation($elevation-low);
+  @include elevation($elevation-low);
 }
 
 .filters__value-link-row {
@@ -179,8 +184,9 @@
   padding: 0 10px;
   background-color: $white;
   width: 100%;
+
   @include rounded($rounded);
-  @include add-elevation($elevation-low);
+  @include elevation($elevation-low);
 
   &:hover {
     text-decoration: none;
@@ -214,7 +220,7 @@
 }
 
 .filters__footer {
-  border: 1px solid rgba(217, 219, 222, 0.5);
+  border-top: 1px solid rgba(217, 219, 222, 0.5);
   padding: 8px 12px;
   display: flex;
   flex-direction: row;
@@ -249,11 +255,11 @@
 
 .filters__condition-item {
   display: grid;
-  width: 500px;
+  width: 560px;
 
-  /* 60px = 36px (button) + (8px (gap) * 3 (number of gaps))  */
-  grid-template-columns: calc(42% - 60px) 26% 32% 36px;
-  column-gap: 8px;
+  /* 48px = 36px (button) + (4px (gap) * 3 (number of gaps))  */
+  grid-template-columns: calc(32% - 48px) 22% 46% 36px;
+  column-gap: 4px;
   align-items: center;
   position: relative;
 

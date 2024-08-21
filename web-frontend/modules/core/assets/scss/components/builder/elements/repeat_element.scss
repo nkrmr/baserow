@@ -1,0 +1,16 @@
+.repeat-element__device-selector {
+  input[type='number'] {
+    text-align: center;
+  }
+}
+
+.repeat-element__preview {
+  opacity: 0.4;
+  pointer-events: none;
+  user-select: none;
+}
+
+.repeat-element__footer {
+  display: flex;
+  flex-direction: column;
+}

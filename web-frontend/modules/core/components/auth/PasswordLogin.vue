@@ -13,69 +13,70 @@
     </Alert>
     <Error :error="error"></Error>
     <form @submit.prevent="login">
-      <FormElement :error="fieldHasErrors('email')" class="auth__control">
-        <label class="auth__control-label">{{
-          $t('field.emailAddress')
-        }}</label>
-        <div class="control__elements">
-          <input
-            v-if="invitation !== null"
-            ref="email"
-            type="email"
-            class="input"
-            disabled
-            :value="values.email"
-          />
-          <input
-            v-else
-            ref="email"
-            v-model="values.email"
-            :class="{ 'input--error': fieldHasErrors('email') }"
-            type="email"
-            autocomplete="username"
-            :placeholder="$t('login.emailPlaceholder')"
-            class="input"
-            @blur="$v.values.email.$touch()"
-          />
-          <div class="auth__control-error">
-            <div v-if="fieldHasErrors('email')" class="error">
-              <i class="iconoir-warning-triangle"></i>
-              {{ $t('error.invalidEmail') }}
-            </div>
-          </div>
-        </div>
-      </FormElement>
-      <FormElement :error="fieldHasErrors('password')" class="auth__control">
-        <label class="auth__control-label">{{ $t('field.password') }}</label>
-        <div class="control__elements">
-          <input
-            ref="password"
-            v-model="values.password"
-            :class="{
-              'input--error': fieldHasErrors('password'),
-            }"
-            type="password"
-            autocomplete="current-password"
-            class="input"
-            :placeholder="$t('login.passwordPlaceholder')"
-            @blur="$v.values.password.$touch()"
-          />
-          <div class="auth__control-error">
-            <div v-if="fieldHasErrors('password')" class="error">
-              <i class="iconoir-warning-triangle"></i>
-              {{ $t('error.passwordRequired') }}
-            </div>
-          </div>
-        </div>
-      </FormElement>
+      <FormGroup
+        class="margin-bottom-2"
+        required
+        small-label
+        :label="$t('field.emailAddress')"
+        :error="fieldHasErrors('email')"
+      >
+        <FormInput
+          v-if="invitation !== null"
+          ref="email"
+          type="email"
+          disabled
+          :value="values.email"
+        ></FormInput>
+        <FormInput
+          v-else
+          ref="email"
+          v-model="values.email"
+          type="email"
+          size="large"
+          :error="fieldHasErrors('email')"
+          :placeholder="$t('login.emailPlaceholder')"
+          autocomplete="username"
+          @blur="$v.values.email.$touch()"
+        />
+
+        <template #error>
+          <i class="iconoir-warning-triangle"></i>
+          {{ $t('error.invalidEmail') }}</template
+        >
+      </FormGroup>
+
+      <FormGroup
+        required
+        small-label
+        :label="$t('field.password')"
+        :error="fieldHasErrors('password')"
+      >
+        <FormInput
+          ref="password"
+          v-model="values.password"
+          type="password"
+          size="large"
+          :error="fieldHasErrors('password')"
+          :placeholder="$t('login.passwordPlaceholder')"
+          autocomplete="current-password"
+          @blur="$v.values.password.$touch()"
+        />
+        <template #error>
+          <i class="iconoir-warning-triangle"></i>
+          {{ $t('error.passwordRequired') }}
+        </template>
+      </FormGroup>
+
       <div class="auth__action">
-        <button
-          :class="{ 'button--loading': loading }"
-          class="button button--full-width"
+        <Button
+          type="primary"
+          size="large"
+          :loading="loading"
+          full-width
           :disabled="loading"
         >
           {{ $t('action.signIn') }}
-        </button>
+        </Button>
       </div>
     </form>
   </div>
@@ -182,6 +183,10 @@ export default {
                 this.$t('clientHandler.disabledPasswordProviderTitle'),
                 this.$t('clientHandler.disabledPasswordProviderMessage')
               )
+            } else if (
+              response.data?.error === 'ERROR_EMAIL_VERIFICATION_REQUIRED'
+            ) {
+              this.$emit('email-not-verified', this.values.email)
             } else {
               this.showError(
                 this.$t('error.incorrectCredentialTitle'),

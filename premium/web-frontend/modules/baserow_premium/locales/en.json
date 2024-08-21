@@ -361,16 +361,29 @@
     },
     "gridViewFieldAI": {
       "generate": "Generate",
-      "regenerate": "Re-Generate"
+      "regenerate": "Regenerate"
     },
     "fieldAISubForm": {
-      "AIType": "AI Type",
-      "AIModel": "AI Model",
       "prompt": "Prompt",
-      "premiumFeature": "The AI field is a premium feature"
+      "promptPlaceholder": "What is Baserow?",
+      "premiumFeature": "The AI field is a premium feature",
+      "emptyFileField": "None",
+      "fileFieldHelp": "The first compatible file in the field will be used as the knowledge base for the prompt. The file has to be a text file with the supported file extension like .txt, .md, .pdf, .docx."
     },
     "rowEditFieldAI": {
       "generate": "Generate",
       "createRowBefore": "The AI value can be generated after the row has been created."
+    },
+    "aiFormulaModal": {
+      "title": "Generate formula using AI",
+      "description": "Note that the generated formulas might not always work as expected. We're constructing a prompt for the model, and we load the output in the formula input. It works best with a high parameter model like gpt-4-turbo-preview.",
+      "label": "Prompt",
+      "labelDescription": "Describe the formula you would like to generate",
+      "generate": "Generate",
+      "noModels": "Your Baserow instance and workspace doesn't have any AI models configured. Click on the three dots next to your workspace, then on settings to configure them."
+    },
+    "formulaFieldAI": {
+      "generateWithAI": "Generate using AI",
+      "featureName": "Generate formula using AI"
     }
 }

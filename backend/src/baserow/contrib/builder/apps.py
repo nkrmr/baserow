@@ -154,21 +154,33 @@ class BuilderConfig(AppConfig):
 
         from .domains.permission_manager import AllowPublicBuilderManagerType
         from .elements.permission_manager import ElementVisibilityPermissionManager
+        from .permission_manager import AllowIfTemplatePermissionManagerType
 
         permission_manager_type_registry.register(AllowPublicBuilderManagerType())
         permission_manager_type_registry.register(ElementVisibilityPermissionManager())
 
+        prev_manager = permission_manager_type_registry.get(
+            AllowIfTemplatePermissionManagerType.type
+        )
+        permission_manager_type_registry.unregister(
+            AllowIfTemplatePermissionManagerType.type
+        )
+        permission_manager_type_registry.register(
+            AllowIfTemplatePermissionManagerType(prev_manager)
+        )
+
         from .elements.element_types import (
             ButtonElementType,
             CheckboxElementType,
+            ChoiceElementType,
             ColumnElementType,
-            DropdownElementType,
             FormContainerElementType,
             HeadingElementType,
             IFrameElementType,
             ImageElementType,
             InputTextElementType,
             LinkElementType,
+            RepeatElementType,
             TableElementType,
             TextElementType,
         )
@@ -182,8 +194,9 @@ class BuilderConfig(AppConfig):
         element_type_registry.register(ColumnElementType())
         element_type_registry.register(ButtonElementType())
         element_type_registry.register(TableElementType())
+        element_type_registry.register(RepeatElementType())
         element_type_registry.register(FormContainerElementType())
-        element_type_registry.register(DropdownElementType())
+        element_type_registry.register(ChoiceElementType())
         element_type_registry.register(CheckboxElementType())
         element_type_registry.register(IFrameElementType())
 
@@ -203,6 +216,7 @@ class BuilderConfig(AppConfig):
 
         from .data_providers.data_provider_types import (
             CurrentRecordDataProviderType,
+            DataSourceContextDataProviderType,
             DataSourceDataProviderType,
             FormDataProviderType,
             PageParameterDataProviderType,
@@ -211,6 +225,9 @@ class BuilderConfig(AppConfig):
         )
 
         builder_data_provider_type_registry.register(DataSourceDataProviderType())
+        builder_data_provider_type_registry.register(
+            DataSourceContextDataProviderType()
+        )
         builder_data_provider_type_registry.register(PageParameterDataProviderType())
         builder_data_provider_type_registry.register(CurrentRecordDataProviderType())
         builder_data_provider_type_registry.register(FormDataProviderType())
@@ -222,9 +239,21 @@ class BuilderConfig(AppConfig):
         operation_type_registry.register(UpdateThemeOperationType())
 
         from .theme.registries import theme_config_block_registry
-        from .theme.theme_config_block_types import MainThemeConfigBlockType
+        from .theme.theme_config_block_types import (
+            ButtonThemeConfigBlockType,
+            ColorThemeConfigBlockType,
+            ImageThemeConfigBlockType,
+            LinkThemeConfigBlockType,
+            PageThemeConfigBlockType,
+            TypographyThemeConfigBlockType,
+        )
 
-        theme_config_block_registry.register(MainThemeConfigBlockType())
+        theme_config_block_registry.register(ColorThemeConfigBlockType())
+        theme_config_block_registry.register(TypographyThemeConfigBlockType())
+        theme_config_block_registry.register(ButtonThemeConfigBlockType())
+        theme_config_block_registry.register(LinkThemeConfigBlockType())
+        theme_config_block_registry.register(ImageThemeConfigBlockType())
+        theme_config_block_registry.register(PageThemeConfigBlockType())
 
         from .workflow_actions.registries import builder_workflow_action_type_registry
         from .workflow_actions.workflow_action_types import (
@@ -232,6 +261,7 @@ class BuilderConfig(AppConfig):
             LogoutWorkflowActionType,
             NotificationWorkflowActionType,
             OpenPageWorkflowActionType,
+            RefreshDataSourceWorkflowAction,
             UpdateRowWorkflowActionType,
         )
 
@@ -240,15 +270,24 @@ class BuilderConfig(AppConfig):
         builder_workflow_action_type_registry.register(CreateRowWorkflowActionType())
         builder_workflow_action_type_registry.register(UpdateRowWorkflowActionType())
         builder_workflow_action_type_registry.register(LogoutWorkflowActionType())
+        builder_workflow_action_type_registry.register(
+            RefreshDataSourceWorkflowAction()
+        )
 
         from .elements.collection_field_types import (
+            BooleanCollectionFieldType,
+            ButtonCollectionFieldType,
             LinkCollectionFieldType,
+            TagsCollectionFieldType,
             TextCollectionFieldType,
         )
         from .elements.registries import collection_field_type_registry
 
+        collection_field_type_registry.register(BooleanCollectionFieldType())
         collection_field_type_registry.register(TextCollectionFieldType())
         collection_field_type_registry.register(LinkCollectionFieldType())
+        collection_field_type_registry.register(TagsCollectionFieldType())
+        collection_field_type_registry.register(ButtonCollectionFieldType())
 
         from .domains.receivers import connect_to_domain_pre_delete_signal
 

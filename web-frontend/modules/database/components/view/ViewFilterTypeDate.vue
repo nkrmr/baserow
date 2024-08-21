@@ -1,19 +1,17 @@
 <template>
   <div class="filters__value-date-timezone">
-    <div>
-      <input
-        ref="date"
+    <div ref="date">
+      <FormInput
         v-model="dateString"
-        type="text"
-        class="input filters__value-input input--small"
         :disabled="disabled"
-        :class="{ 'input--error': $v.dateString.$error }"
+        :error="$v.dateString.$error"
         :placeholder="getDatePlaceholder(field)"
         @focus="$refs.dateContext.toggle($refs.date, 'bottom', 'left', 0)"
         @blur="$refs.dateContext.hide()"
         @input=";[setCopyFromDateString(dateString, 'dateString')]"
         @keydown.enter="delayedUpdate(copy, true)"
-      />
+      >
+      </FormInput>
       <Context
         ref="dateContext"
         :hide-on-click-outside="false"

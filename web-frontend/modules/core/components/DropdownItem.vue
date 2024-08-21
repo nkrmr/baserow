@@ -1,5 +1,6 @@
 <template>
   <li
+    v-if="visible"
     class="select__item select__item--no-options"
     :class="{
       hidden: !isVisible(query),
@@ -15,7 +16,7 @@
       @mousemove="hover(value, disabled)"
     >
       <div class="select__item-name">
-        <div v-if="multiple">
+        <div v-if="multiple.value">
           <Checkbox :disabled="disabled" :checked="isActive(value)"></Checkbox>
         </div>
         <slot>
@@ -33,7 +34,10 @@
         {{ description }}
       </div>
     </a>
-    <i v-if="!multiple" class="select__item-active-icon iconoir-check"></i>
+    <i
+      v-if="!multiple.value"
+      class="select__item-active-icon iconoir-check"
+    ></i>
   </li>
 </template>
 

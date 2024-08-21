@@ -43,7 +43,7 @@ from baserow.core.registry import (
     Registry,
 )
 
-from .deferred_field_fk_updater import DeferredFieldFkUpdater
+from .deferred_foreign_key_updater import DeferredForeignKeyUpdater
 from .exceptions import (
     FieldTypeAlreadyRegistered,
     FieldTypeDoesNotExist,
@@ -333,13 +333,20 @@ class FieldType(
 
         empty_is_empty_list_or_object_model_field_types = (JSONField, PostgresJSONField)
         if isinstance(model_field, empty_is_empty_list_or_object_model_field_types):
-            q = q | Q(**{f"{field_name}": []}) | Q(**{f"{field_name}": {}})
+            q = (
+                q
+                | Q(**{f"{field_name}": Value([], JSONField())})
+                | Q(**{f"{field_name}": Value({}, JSONField())})
+            )
 
         # If the model field accepts an empty string as value we are going to add
         # that to the or statement.
         try:
             model_field.get_prep_value("")
-            q = q | Q(**{f"{field_name}": ""})
+            if isinstance(model_field, empty_is_empty_list_or_object_model_field_types):
+                q = q | Q(**{f"{field_name}": Value("", JSONField())})
+            else:
+                q = q | Q(**{f"{field_name}": ""})
             return q
         except Exception:
             return q
@@ -454,7 +461,7 @@ class FieldType(
         Returns True if the provided instances have compatible model fields.
         """
 
-        return type(instance) == type(instance2)
+        return type(instance) is type(instance2)
 
     def after_model_generation(self, instance, model, field_name):
         """
@@ -887,7 +894,7 @@ class FieldType(
         serialized_values: Dict[str, Any],
         import_export_config: ImportExportConfig,
         id_mapping: Dict[str, Any],
-        deferred_fk_update_collector: DeferredFieldFkUpdater,
+        deferred_fk_update_collector: DeferredForeignKeyUpdater,
     ) -> Field:
         """
         Imported an exported serialized field dict that was exported via the

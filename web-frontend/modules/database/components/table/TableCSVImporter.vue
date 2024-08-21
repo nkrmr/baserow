@@ -1,8 +1,8 @@
 <template>
   <div>
-    <div class="control">
+    <div class="control margin-bottom-3">
       <template v-if="filename === ''">
-        <label class="control__label">{{
+        <label class="control__label control__label--small">{{
           $t('tableCSVImporter.chooseFileLabel')
         }}</label>
         <div class="control__description">
@@ -18,15 +18,17 @@
             accept=".csv"
             @change="select($event)"
           />
-          <a
-            class="button button--large button--ghost file-upload__button"
-            :class="{ 'button--loading': state !== null }"
+          <Button
+            type="upload"
+            size="large"
+            :loading="state !== null"
             :disabled="disabled"
+            icon="iconoir-cloud-upload"
+            class="file-upload__button"
             @click.prevent="!disabled && $refs.file.click($event)"
           >
-            <i class="iconoir-cloud-upload"></i>
             {{ $t('tableCSVImporter.chooseFile') }}
-          </a>
+          </Button>
           <div v-if="state === null" class="file-upload__file">
             {{ filename }}
           </div>
@@ -48,7 +50,7 @@
     <div v-if="filename !== ''" class="row">
       <div class="col col-4">
         <div class="control">
-          <label class="control__label">{{
+          <label class="control__label control__label--small">{{
             $t('tableCSVImporter.columnSeparator')
           }}</label>
           <div class="control__elements">
@@ -76,7 +78,7 @@
       </div>
       <div class="col col-4">
         <div class="control">
-          <label class="control__label">{{
+          <label class="control__label control__label--small">{{
             $t('tableCSVImporter.encoding')
           }}</label>
           <div class="control__elements">
@@ -90,7 +92,7 @@
       </div>
       <div class="col col-4">
         <div class="control">
-          <label class="control__label">{{
+          <label class="control__label control__label--small">{{
             $t('tableCSVImporter.firstRowHeader')
           }}</label>
           <div class="control__elements">

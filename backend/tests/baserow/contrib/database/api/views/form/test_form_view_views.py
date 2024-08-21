@@ -25,7 +25,7 @@ from baserow.contrib.database.views.models import (
     FormViewFieldOptionsConditionGroup,
 )
 from baserow.core.user_files.models import UserFile
-from baserow.test_utils.helpers import setup_interesting_test_table
+from baserow.test_utils.helpers import AnyInt, setup_interesting_test_table
 
 
 @pytest.mark.django_db
@@ -324,7 +324,12 @@ def test_meta_submit_form_view(api_client, data_fixture):
         "conditions": [],
         "condition_groups": [],
         "show_when_matching_conditions": False,
-        "field": {"id": text_field.id, "type": "text", "text_default": ""},
+        "field": {
+            "id": text_field.id,
+            "name": text_field.name,
+            "type": "text",
+            "text_default": "",
+        },
         "field_component": "default",
     }
     assert response_json["fields"][1] == {
@@ -338,11 +343,58 @@ def test_meta_submit_form_view(api_client, data_fixture):
         "show_when_matching_conditions": False,
         "field": {
             "id": number_field.id,
+            "name": number_field.name,
             "type": "number",
             "number_decimal_places": 0,
             "number_negative": False,
         },
         "field_component": "default",
+    }
+
+
+@pytest.mark.django_db
+def test_submit_form_with_link_row_field(api_client, data_fixture):
+    user, token = data_fixture.create_user_and_token()
+    table = data_fixture.create_database_table(user=user)
+
+    table_2 = data_fixture.create_database_table(user=user, database=table.database)
+    primary_t2 = data_fixture.create_text_field(table=table_2, primary=True)
+
+    t2_model = table_2.get_model()
+    r1 = t2_model.objects.create(**{f"field_{primary_t2.id}": "a"})
+
+    form = data_fixture.create_form_view(
+        table=table,
+        public=True,
+        submit_action_message="Test",
+        submit_action_redirect_url="https://baserow.io",
+    )
+    link_row_field = data_fixture.create_link_row_field(
+        table=table, link_row_table=table_2
+    )
+
+    data_fixture.create_form_view_field_option(
+        form, link_row_field, required=True, enabled=True, order=1
+    )
+
+    url = reverse("api:database:views:form:submit", kwargs={"slug": form.slug})
+    response = api_client.post(url, {}, format="json")
+    response_json = response.json()
+    assert response.status_code == HTTP_400_BAD_REQUEST, response_json
+    assert response_json["error"] == "ERROR_REQUEST_BODY_VALIDATION"
+    assert len(response_json["detail"]) == 1
+    assert (
+        response_json["detail"][f"field_{link_row_field.id}"][0]["code"] == "required"
+    )
+
+    response = api_client.post(url, {link_row_field.db_column: [r1.id]}, format="json")
+    response_json = response.json()
+    assert response.status_code == HTTP_200_OK, response_json
+    assert response_json == {
+        "row_id": AnyInt(),
+        "submit_action": "MESSAGE",
+        "submit_action_message": "Test",
+        "submit_action_redirect_url": "https://baserow.io",
     }
 
 
@@ -761,6 +813,88 @@ def test_form_view_link_row_lookup_view(api_client, data_fixture):
 
 
 @pytest.mark.django_db
+def test_form_view_link_row_lookup_view_with_link_row_limit_selection_view(
+    api_client, data_fixture
+):
+    user, token = data_fixture.create_user_and_token()
+    database = data_fixture.create_database_application(user=user)
+    table = data_fixture.create_database_table(database=database)
+    lookup_table = data_fixture.create_database_table(database=database)
+    form = data_fixture.create_form_view(table=table, public=True)
+    text_field = data_fixture.create_text_field(table=table)
+    primary_related_field = data_fixture.create_text_field(
+        table=lookup_table, primary=True
+    )
+    secondary_related_field = data_fixture.create_text_field(
+        table=lookup_table, primary=False
+    )
+    lookup_table_view = data_fixture.create_grid_view(
+        table=lookup_table, name="Filtered"
+    )
+    data_fixture.create_view_filter(
+        user,
+        field=primary_related_field,
+        view=lookup_table_view,
+        type="contains",
+        value="1",
+    )
+    data_fixture.create_view_filter(
+        user,
+        field=secondary_related_field,
+        view=lookup_table_view,
+        type="contains",
+        value="1",
+    )
+    link_row_field = data_fixture.create_link_row_field(
+        table=table,
+        link_row_table=lookup_table,
+        link_row_limit_selection_view=lookup_table_view,
+    )
+    data_fixture.create_text_field(table=lookup_table)
+    data_fixture.create_form_view_field_option(
+        form, text_field, required=True, enabled=True, order=1
+    )
+    data_fixture.create_form_view_field_option(
+        form, link_row_field, required=True, enabled=True, order=2
+    )
+
+    lookup_model = lookup_table.get_model()
+    i1 = lookup_model.objects.create(
+        **{
+            f"field_{primary_related_field.id}": "Test 1",
+            f"field_{secondary_related_field.id}": "Test 1",
+        }
+    )
+    i2 = lookup_model.objects.create(
+        **{
+            f"field_{primary_related_field.id}": "Test 2",
+            f"field_{secondary_related_field.id}": "Test 2",
+        }
+    )
+    i3 = lookup_model.objects.create(
+        **{
+            f"field_{primary_related_field.id}": "Test 3",
+            f"field_{secondary_related_field.id}": "Test 3",
+        }
+    )
+
+    url = reverse(
+        "api:database:views:link_row_field_lookup",
+        kwargs={"slug": form.slug, "field_id": link_row_field.id},
+    )
+    response = api_client.get(
+        url,
+        format="json",
+    )
+    assert response.status_code == HTTP_200_OK
+    response_json = response.json()
+    assert response_json["count"] == 1
+    assert len(response_json["results"]) == 1
+    assert response_json["results"][0]["id"] == i1.id
+    assert response_json["results"][0]["value"] == "Test 1"
+
+
+@pytest.mark.django_db
 def test_test_enable_form_view_file_field_options(api_client, data_fixture):
     user, token = data_fixture.create_user_and_token(
         email="test@test.nl", password="password", first_name="Test1"
@@ -862,6 +996,7 @@ def test_get_form_view_field_options(
                     {
                         "id": condition_group_1.id,
                         "filter_type": "AND",
+                        "parent_group": None,
                     },
                 ],
                 "conditions": [
@@ -1065,10 +1200,12 @@ def test_patch_form_view_field_options_condition_groups_create(
                     {
                         "id": conditions[0]["group_id"],
                         "filter_type": "OR",
+                        "parent_group": None,
                     },
                     {
                         "id": conditions[1]["group_id"],
                         "filter_type": "OR",
+                        "parent_group": None,
                     },
                 ],
                 "conditions": [
@@ -1292,6 +1429,7 @@ def test_patch_form_view_field_options_condition_groups_update(
                     {
                         "id": condition_group_1.id,
                         "filter_type": "OR",
+                        "parent_group": None,
                     }
                 ],
                 "conditions": [
@@ -1640,6 +1778,131 @@ def test_patch_form_view_field_options_conditions_create_invalid_field(
 
 
 @pytest.mark.django_db
+def test_patch_form_view_field_options_conditions_can_be_nested(
+    api_client, data_fixture
+):
+    user, token = data_fixture.create_user_and_token()
+    table = data_fixture.create_database_table(user=user)
+    text_field = data_fixture.create_text_field(table=table)
+    text_field_2 = data_fixture.create_text_field(table=table)
+    form_view = data_fixture.create_form_view(table=table)
+    data_fixture.warm_cache_before_counting_queries()
+
+    url = reverse("api:database:views:field_options", kwargs={"view_id": form_view.id})
+
+    # Nested groups cannot be created in a single request.
+    response = api_client.patch(
+        url,
+        {
+            "field_options": {
+                str(text_field.id): {
+                    "condition_groups": [
+                        {
+                            "id": 0,
+                            "filter_type": "AND",
+                        },
+                        {
+                            "id": -1,
+                            "filter_type": "AND",
+                            "parent_group": 0,
+                        },
+                    ],
+                    "conditions": [
+                        {
+                            "id": 0,
+                            "field": text_field_2.id,
+                            "type": "equal",
+                            "value": "test",
+                            "group": -1,
+                        }
+                    ],
+                },
+            }
+        },
+        format="json",
+        HTTP_AUTHORIZATION=f"JWT {token}",
+    )
+
+    response_json = response.json()
+    assert response.status_code == HTTP_400_BAD_REQUEST
+
+    # Create the root group first.
+    response = api_client.patch(
+        url,
+        {
+            "field_options": {
+                str(text_field.id): {
+                    "condition_groups": [
+                        {
+                            "id": 0,
+                            "filter_type": "AND",
+                        }
+                    ],
+                    "conditions": [
+                        {
+                            "id": 0,
+                            "field": text_field_2.id,
+                            "type": "equal",
+                            "value": "test",
+                            "group": 0,
+                        }
+                    ],
+                },
+            }
+        },
+        format="json",
+        HTTP_AUTHORIZATION=f"JWT {token}",
+    )
+
+    response_json = response.json()
+    assert response.status_code == HTTP_200_OK
+    root_group = response_json["field_options"][str(text_field.id)]["condition_groups"][
+        0
+    ]
+
+    # And then create the nested group with filters.
+    response = api_client.patch(
+        url,
+        {
+            "field_options": {
+                str(text_field.id): {
+                    "condition_groups": [
+                        root_group,
+                        {
+                            "id": 0,
+                            "filter_type": "AND",
+                            "parent_group": root_group["id"],
+                        },
+                    ],
+                    "conditions": [
+                        {
+                            "id": 0,
+                            "field": text_field_2.id,
+                            "type": "equal",
+                            "value": "test",
+                            "group": 0,
+                        }
+                    ],
+                },
+            }
+        },
+        format="json",
+        HTTP_AUTHORIZATION=f"JWT {token}",
+    )
+
+    response_json = response.json()
+    assert response.status_code == HTTP_200_OK
+
+    parent_group, child_group_1 = response_json["field_options"][str(text_field.id)][
+        "condition_groups"
+    ]
+    assert child_group_1["parent_group"] == parent_group["id"]
+    assert len(response_json["field_options"][str(text_field.id)]["conditions"]) == 1
+    condition = response_json["field_options"][str(text_field.id)]["conditions"][0]
+    assert condition["group"] == child_group_1["id"]
+
+
+@pytest.mark.django_db
 def test_patch_form_view_field_options_conditions_create_num_queries(
     api_client, data_fixture, django_assert_max_num_queries
 ):
@@ -1746,7 +2009,7 @@ def test_patch_form_view_field_options_conditions_create_num_queries(
 
 @pytest.mark.django_db
 def test_patch_form_view_field_options_conditions_update_num_queries(
-    api_client, data_fixture, django_assert_num_queries
+    api_client, data_fixture, django_assert_num_queries, bypass_check_permissions
 ):
     user, token = data_fixture.create_user_and_token()
     table = data_fixture.create_database_table(user=user)
@@ -1905,7 +2168,7 @@ def test_patch_form_view_field_options_conditions_update_num_queries(
 
 @pytest.mark.django_db
 def test_patch_form_view_field_options_conditions_delete_num_queries(
-    api_client, data_fixture, django_assert_max_num_queries
+    api_client, data_fixture, django_assert_max_num_queries, bypass_check_permissions
 ):
     user, token = data_fixture.create_user_and_token()
     table = data_fixture.create_database_table(user=user)
@@ -1984,7 +2247,7 @@ def test_patch_form_view_field_options_conditions_delete_num_queries(
 
 @pytest.mark.django_db
 def test_patch_form_view_field_options_condition_groups_delete_num_queries(
-    api_client, data_fixture, django_assert_max_num_queries
+    api_client, data_fixture, django_assert_max_num_queries, bypass_check_permissions
 ):
     user, token = data_fixture.create_user_and_token()
     table = data_fixture.create_database_table(user=user)
@@ -2320,6 +2583,7 @@ def test_upload_file_view(api_client, data_fixture, tmpdir):
     with patch("baserow.core.user_files.handler.default_storage", new=storage):
         with freeze_time("2020-01-01 12:00"):
             file = SimpleUploadedFile("test.txt", b"Hello World")
+            token = data_fixture.generate_token(user)
             response = api_client.post(
                 reverse(
                     "api:database:views:form:upload_file",
@@ -2349,6 +2613,7 @@ def test_upload_file_view(api_client, data_fixture, tmpdir):
     assert file_path.isfile()
 
     with patch("baserow.core.user_files.handler.default_storage", new=storage):
+        token = data_fixture.generate_token(user)
         file = SimpleUploadedFile("test.txt", b"Hello World")
         response_2 = api_client.post(
             reverse(
@@ -2361,6 +2626,7 @@ def test_upload_file_view(api_client, data_fixture, tmpdir):
         )
 
     # The old file should be provided.
+    assert response_2.status_code == HTTP_200_OK
     assert response_2.json()["name"] == response_json["name"]
     assert response_json["original_name"] == "test.txt"
 
@@ -2687,7 +2953,7 @@ def test_user_can_update_form_to_receive_notification(api_client, data_fixture):
 
 @pytest.mark.django_db()
 def test_loading_form_views_does_not_increase_the_number_of_queries(
-    api_client, data_fixture
+    api_client, data_fixture, bypass_check_permissions
 ):
     user, token = data_fixture.create_user_and_token()
 

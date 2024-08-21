@@ -1,11 +1,14 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Type, TypedDict, TypeVar, Union
+from zipfile import ZipFile
 
+from django.core.files.storage import Storage
 from django.db import models
 
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
+from baserow.contrib.database.db.functions import RandomUUID
 from baserow.core.registry import (
     CustomFieldsInstanceMixin,
     CustomFieldsRegistryMixin,
@@ -15,9 +18,16 @@ from baserow.core.registry import (
     ModelRegistryMixin,
     Registry,
 )
+from baserow.core.user_files.handler import UserFileHandler
+from baserow.core.user_sources.constants import DEFAULT_USER_ROLE_PREFIX
+from baserow.core.user_sources.handler import UserSourceHandler
 
 from .models import CollectionField, Element
 from .types import ElementDictSubClass, ElementSubClass
+
+BUILDER_PAGE_ELEMENTS = "builder_page_elements"
+ELEMENT_IDS_PROCESSED_FOR_ROLES = "_element_ids_processed_for_roles"
+EXISTING_USER_SOURCE_ROLES = "_existing_user_source_roles"
 
 
 class ElementType(
@@ -31,7 +41,7 @@ class ElementType(
 
     SerializedDict: Type[ElementDictSubClass]
     parent_property_name = "page"
-    id_mapping_name = "builder_page_elements"
+    id_mapping_name = BUILDER_PAGE_ELEMENTS
 
     # The order in which this element type is imported in `import_elements`.
     # By default, the priority is `0`, the lowest value. If this property is
@@ -99,7 +109,123 @@ class ElementType(
         :param instance: The to be deleted element instance.
         """
 
-    def serialize_property(self, element: Element, prop_name: str):
+    def import_context_addition(
+        self, instance: ElementSubClass, id_mapping
+    ) -> Dict[str, Any]:
+        """
+        This hook allow to specify extra context data when importing objects related
+        to this one like child elements, collection fields or workflow actions.
+        This extra context is then used as import context for these objects.
+
+        :param instance: The instance we want the context for.
+        :param id_mapping: The import ID mapping object.
+        :return: An object containing the extra context for the import process.
+        """
+
+        return {}
+
+    def import_serialized(
+        self,
+        page: Any,
+        serialized_values: Dict[str, Any],
+        id_mapping: Dict[str, Dict[int, int]],
+        files_zip: ZipFile | None = None,
+        storage: Storage | None = None,
+        cache: Dict[str, Any] | None = None,
+        **kwargs,
+    ) -> ElementSubClass:
+        from baserow.contrib.builder.elements.handler import ElementHandler
+
+        if cache is None:
+            cache = {}
+
+        import_context = {}
+
+        parent_element_id = serialized_values["parent_element_id"]
+
+        # If we have a parent element then we want to add used its import context
+        if parent_element_id:
+            imported_parent_element_id = id_mapping["builder_page_elements"][
+                parent_element_id
+            ]
+            import_context = ElementHandler().get_import_context_addition(
+                imported_parent_element_id,
+                id_mapping,
+                element_map=cache.get("imported_element_map", None),
+            )
+
+        existing_roles = cache.get("existing_roles", {}).get(page.builder.id)
+        if not existing_roles:
+            existing_roles = UserSourceHandler().get_all_roles_for_application(
+                page.builder
+            )
+            cache.setdefault("existing_roles", {})[page.builder.id] = existing_roles
+
+        serialized_values["roles"] = self.sanitize_element_roles(
+            # TODO: `or []` check should be removed in the next release.
+            #   See: https://gitlab.com/baserow/baserow/-/issues/2724
+            serialized_values.get("roles") or [],
+            existing_roles,
+            id_mapping.get("user_sources", {}),
+        )
+
+        created_instance = super().import_serialized(
+            page,
+            serialized_values,
+            id_mapping,
+            files_zip,
+            storage,
+            cache,
+            **(kwargs | import_context),
+        )
+
+        # Add created instance to an element cache
+        cache.setdefault("imported_element_map", {})[
+            created_instance.id
+        ] = created_instance
+
+        return created_instance
+
+    def sanitize_element_roles(
+        self,
+        roles: List[str],
+        existing_roles: List[str],
+        user_sources_mapping: Dict[int, int],
+    ) -> List[str]:
+        """
+        Given a list of roles, return a sanitized version of it. The sanitized
+        version should not contain any invalid roles.
+
+        An invalid role is a role name that doesn't exist (e.g. due to renaming
+        or deletion). Also, Default User Roles are updated to ensure they contain
+        the new User Source's ID.
+        """
+
+        sanitized_roles = []
+        for role in roles:
+            if role in existing_roles:
+                sanitized_roles.append(role)
+                continue
+
+            # Ensure the default role is using the newly published UserSource ID
+            prefix = str(DEFAULT_USER_ROLE_PREFIX)
+            if role.startswith(prefix) and user_sources_mapping:
+                old_user_source_id = int(role[len(prefix) :])
+                new_user_source_id = user_sources_mapping[old_user_source_id]
+                new_role_name = f"{prefix}{new_user_source_id}"
+                if new_role_name in existing_roles:
+                    sanitized_roles.append(new_role_name)
+
+        return sanitized_roles
+
+    def serialize_property(
+        self,
+        element: Element,
+        prop_name: str,
+        files_zip: Optional[ZipFile] = None,
+        storage: Optional[Storage] = None,
+        cache: Optional[Dict] = None,
+    ):
         """
         You can customize the behavior of the serialization of a property with this
         hook.
@@ -108,10 +234,27 @@ class ElementType(
         if prop_name == "order":
             return str(element.order)
 
-        return super().serialize_property(element, prop_name)
+        if prop_name == "style_background_file_id":
+            return UserFileHandler().export_user_file(
+                element.style_background_file,
+                files_zip=files_zip,
+                storage=storage,
+                cache=cache,
+            )
+
+        return super().serialize_property(
+            element, prop_name, files_zip=files_zip, storage=storage, cache=cache
+        )
 
     def deserialize_property(
-        self, prop_name: str, value: Any, id_mapping: Dict[str, Any]
+        self,
+        prop_name: str,
+        value: Any,
+        id_mapping: Dict[str, Any],
+        files_zip: Optional[ZipFile] = None,
+        storage: Optional[Storage] = None,
+        cache: Optional[Dict] = None,
+        **kwargs,
     ) -> Any:
         """
         This hooks allow to customize the deserialization of a property.
@@ -119,14 +262,28 @@ class ElementType(
         :param prop_name: the name of the property being transformed.
         :param value: the value of this property.
         :param id_mapping: the id mapping dict.
+        :param files_zip: the zip file containing the files.
+        :param storage: the storage where the files should be stored.
+        :param cache: a cache dict that can be used to store temporary data.
         :return: the deserialized version for this property.
         """
 
+        if cache is None:
+            cache = {}
+
         if prop_name == "parent_element_id":
-            return id_mapping["builder_page_elements"].get(
+            return id_mapping[BUILDER_PAGE_ELEMENTS].get(
                 value,
                 value,
             )
+
+        if prop_name == "style_background_file_id":
+            user_file = UserFileHandler().import_user_file(
+                value, files_zip=files_zip, storage=storage
+            )
+            if user_file:
+                return user_file.id
+            return None
 
         return value
 
@@ -185,6 +342,7 @@ class CollectionFieldType(
         )
 
         serialized = {
+            "uid": str(instance.uid),
             "name": instance.name,
             "type": instance.type,
             "config": serialized_config,
@@ -197,7 +355,8 @@ class CollectionFieldType(
         prop_name: str,
         value: Any,
         id_mapping: Dict[str, Any],
-        data_source_id: Optional[int] = None,
+        serialized_values: Dict[str, Any],
+        **kwargs,
     ) -> Any:
         """
         This hooks allow to customize the deserialization of a property.
@@ -205,6 +364,8 @@ class CollectionFieldType(
         :param prop_name: the name of the property being transformed.
         :param value: the value of this property.
         :param id_mapping: the id mapping dict.
+        :param serialized_values: the serialized values, which can be accessed
+            during deserialization to perform extra checks.
         :return: the deserialized version for this property.
         """
 
@@ -236,9 +397,10 @@ class CollectionFieldType(
 
         An id_mapping for this class is populated during the process.
 
-        :param parent: The parent object of the to be imported values.
-        :serialized_values: The dict containing the serialized values.
-        :id_mapping: Used to mapped object ids from export to newly created instances.
+        :param serialized_values: The dict containing the serialized values.
+        :param id_mapping: Used to mapped object ids from export to newly
+            created instances.
+        :param data_source_id: The data source id.
         :return: The created instance.
         """
 
@@ -248,10 +410,12 @@ class CollectionFieldType(
                 name,
                 serialized_values["config"][name],
                 id_mapping,
+                serialized_values,
                 data_source_id=data_source_id,
             )
 
         deserialized_values = {
+            "uid": serialized_values.get("uid", RandomUUID()),
             "config": deserialized_config,
             "type": serialized_values["type"],
             "name": serialized_values["name"],
@@ -291,6 +455,12 @@ class CollectionFieldType(
         )
 
         return serializer_class(model_instance_or_instances, context=context, **kwargs)
+
+    def before_delete(self, instance: CollectionField):
+        """
+        This hooks is called before we delete a collection field and gives the
+        opportunity to clean up things.
+        """
 
 
 CollectionFieldTypeSubClass = TypeVar(

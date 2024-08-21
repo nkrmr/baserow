@@ -16,8 +16,10 @@ from typing import (
     Union,
     ValuesView,
 )
+from zipfile import ZipFile
 
 from django.core.exceptions import ImproperlyConfigured
+from django.core.files.storage import Storage
 from django.db import models
 
 from rest_framework import serializers
@@ -52,6 +54,16 @@ class Instance(object):
     def __init__(self):
         if not self.type:
             raise ImproperlyConfigured("The type of an instance must be set.")
+
+    def after_register(self):
+        """
+        Hook that is called after an instance is registered in a registry.
+        """
+
+    def before_unregister(self):
+        """
+        Hook that is called before an instance is unregistered from a registry.
+        """
 
 
 DjangoModel = TypeVar("DjangoModel", bound=models.Model)
@@ -372,18 +384,26 @@ class EasyImportExportMixin(Generic[T], ABC):
     """
 
     # Describe the properties to serialize
-    SerializedDict: TypedDict
+    SerializedDict: Type[TypedDict]
 
     # The parent property name for the model
     parent_property_name: str
 
-    # The name of the id mapping used for import process
-    id_mapping_name: str
+    # The name of the id mapping used for import process. Let it None if you don't need
+    # this feature.
+    id_mapping_name: Optional[str] = None
 
     # The model class to create
     model_class: Type[T]
 
-    def serialize_property(self, instance: T, prop_name: str) -> Any:
+    def serialize_property(
+        self,
+        instance: T,
+        prop_name: str,
+        files_zip: Optional[ZipFile] = None,
+        storage: Optional[Storage] = None,
+        cache: Optional[Dict[str, any]] = None,
+    ) -> Any:
         """
         You can customize the behavior of the serialization of a property with this
         hook.
@@ -398,9 +418,22 @@ class EasyImportExportMixin(Generic[T], ABC):
 
         return getattr(instance, prop_name)
 
+    def get_property_names(self):
+        """
+        Returns a list of properties to export/import for this type. By default it uses
+        the SerializedDict properties.
+
+        :returns: a list of property names belonging to instances of this type.
+        """
+
+        return self.SerializedDict.__annotations__.keys()
+
     def export_serialized(
         self,
         instance: T,
+        files_zip: Optional[ZipFile] = None,
+        storage: Optional[Storage] = None,
+        cache: Optional[Dict[str, any]] = None,
     ) -> Dict[str, Any]:
         """
         Exports the instance to a serialized dict that can be imported by the
@@ -410,10 +443,17 @@ class EasyImportExportMixin(Generic[T], ABC):
         :return: The exported instance as serialized dict.
         """
 
-        property_names = self.SerializedDict.__annotations__.keys()
-
-        serialized = self.SerializedDict(
-            **{key: self.serialize_property(instance, key) for key in property_names}
+        serialized = dict(
+            **{
+                key: self.serialize_property(
+                    instance,
+                    key,
+                    files_zip=files_zip,
+                    storage=storage,
+                    cache=cache,
+                )
+                for key in self.get_property_names()
+            }
         )
 
         return serialized
@@ -423,6 +463,9 @@ class EasyImportExportMixin(Generic[T], ABC):
         prop_name: str,
         value: Any,
         id_mapping: Dict[str, Dict[int, int]],
+        files_zip: Optional[ZipFile] = None,
+        storage: Optional[Storage] = None,
+        cache: Optional[Dict[str, any]] = None,
         **kwargs,
     ) -> Any:
         """
@@ -437,7 +480,15 @@ class EasyImportExportMixin(Generic[T], ABC):
 
         return value
 
-    def create_instance_from_serialized(self, serialized_values: Dict[str, Any]) -> T:
+    def create_instance_from_serialized(
+        self,
+        serialized_values: Dict[str, Any],
+        id_mapping,
+        files_zip: Optional[ZipFile] = None,
+        storage: Optional[Storage] = None,
+        cache: Optional[Dict[str, any]] = None,
+        **kwargs,
+    ) -> T:
         """
         Create the instance related to the given serialized values.
         Allow to hook into instance creation while still having the serialized values.
@@ -456,6 +507,9 @@ class EasyImportExportMixin(Generic[T], ABC):
         parent: Any,
         serialized_values: Dict[str, Any],
         id_mapping: Dict[str, Dict[int, int]],
+        files_zip: Optional[ZipFile] = None,
+        storage: Optional[Storage] = None,
+        cache: Optional[Dict[str, any]] = None,
         **kwargs,
     ) -> T:
         """
@@ -468,33 +522,49 @@ class EasyImportExportMixin(Generic[T], ABC):
         :param serialized_values: The dict containing the serialized values.
         :param id_mapping: Used to mapped object ids from export to newly created
           instances.
-        :param kwargs: extra parameters used to deserialize a property.
         :return: The created instance.
         """
 
-        if self.id_mapping_name not in id_mapping:
+        if self.id_mapping_name and self.id_mapping_name not in id_mapping:
             id_mapping[self.id_mapping_name] = {}
 
         deserialized_properties = {}
-        for name in self.SerializedDict.__annotations__.keys():
+        for name in self.get_property_names():
             if name in serialized_values and name != f"{self.parent_property_name}_id":
                 deserialized_properties[name] = self.deserialize_property(
-                    name, serialized_values[name], id_mapping, **kwargs
+                    name,
+                    serialized_values[name],
+                    id_mapping,
+                    files_zip=files_zip,
+                    storage=storage,
+                    cache=cache,
+                    **kwargs,
                 )
 
         # Remove id key
-        originale_instance_id = deserialized_properties.pop("id")
+        originale_instance_id = deserialized_properties.pop("id", 0)
 
-        # Remove type
-        deserialized_properties.pop("type")
+        # Remove type if any
+        if "type" in deserialized_properties:
+            deserialized_properties.pop("type")
 
         # Add the parent
         deserialized_properties[self.parent_property_name] = parent
 
-        created_instance = self.create_instance_from_serialized(deserialized_properties)
+        created_instance = self.create_instance_from_serialized(
+            deserialized_properties,
+            id_mapping=id_mapping,
+            files_zip=files_zip,
+            storage=storage,
+            cache=cache,
+            **kwargs,
+        )
 
-        # Add the created instance to the mapping
-        id_mapping[self.id_mapping_name][originale_instance_id] = created_instance.id
+        if self.id_mapping_name:
+            # Add the created instance to the mapping
+            id_mapping[self.id_mapping_name][
+                originale_instance_id
+            ] = created_instance.id
 
         return created_instance
 
@@ -608,7 +678,9 @@ class Registry(Generic[InstanceSubClass]):
 
         self.registry[instance.type] = instance
 
-    def unregister(self, value: InstanceSubClass):
+        instance.after_register()
+
+    def unregister(self, value: Union[str, InstanceSubClass]):
         """
         Removes a registered instance from the registry. An instance or type name can be
         provided as value.
@@ -625,10 +697,12 @@ class Registry(Generic[InstanceSubClass]):
                     value = type_name
 
         if isinstance(value, str):
+            instance = self.registry[value]
+            instance.before_unregister()
             del self.registry[value]
         else:
             raise ValueError(
-                f"The value must either be an {self.name} instance or " f"type name"
+                f"The value must either be an {self.name} instance or type name"
             )
 
 

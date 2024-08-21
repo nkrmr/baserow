@@ -1,11 +1,9 @@
 <template>
   <div>
-    <FormElement class="control">
-      <label class="control__label">
-        {{ $t('localBaserowForm.user') }}
-      </label>
+    <FormGroup :label="$t('localBaserowForm.user')" required small-label>
       <div class="local-baserow-form__user">
         <Presentation
+          v-if="values.authorized_user"
           :title="values.authorized_user.first_name"
           :subtitle="values.authorized_user.username"
           :initials="values.authorized_user.first_name | nameAbbreviation"
@@ -13,7 +11,7 @@
         />
         <div>{{ $t('localBaserowForm.userMessage') }}</div>
       </div>
-    </FormElement>
+    </FormGroup>
   </div>
 </template>
 

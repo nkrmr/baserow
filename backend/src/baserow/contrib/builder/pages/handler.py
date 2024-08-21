@@ -347,6 +347,7 @@ class PageHandler:
         page: Page,
         files_zip: Optional[ZipFile] = None,
         storage: Optional[Storage] = None,
+        cache: Optional[Dict[str, any]] = None,
     ) -> List[PageDict]:
         """
         Serializes the given page.
@@ -359,14 +360,16 @@ class PageHandler:
 
         # Get serialized version of all elements of the current page
         serialized_elements = [
-            ElementHandler().export_element(e, files_zip=files_zip, storage=storage)
+            ElementHandler().export_element(
+                e, files_zip=files_zip, storage=storage, cache=cache
+            )
             for e in ElementHandler().get_elements(page=page)
         ]
 
         # Get serialized versions of all workflow actions of the current page
         serialized_workflow_actions = [
             BuilderWorkflowActionHandler().export_workflow_action(
-                wa, files_zip=files_zip, storage=storage
+                wa, files_zip=files_zip, storage=storage, cache=cache
             )
             for wa in BuilderWorkflowActionHandler().get_workflow_actions(page=page)
         ]
@@ -374,7 +377,7 @@ class PageHandler:
         # Get serialized version of all data_sources for the current page
         serialized_data_sources = [
             DataSourceHandler().export_data_source(
-                ds, files_zip=files_zip, storage=storage
+                ds, files_zip=files_zip, storage=storage, cache=cache
             )
             for ds in DataSourceHandler().get_data_sources(page=page)
         ]
@@ -413,6 +416,7 @@ class PageHandler:
         files_zip: Optional[ZipFile] = None,
         storage: Optional[Storage] = None,
         progress: Optional[ChildProgressBuilder] = None,
+        cache: Optional[Dict[str, any]] = None,
     ):
         """
         Import multiple pages at once. Especially useful when we have dependencies
@@ -428,6 +432,9 @@ class PageHandler:
         :return: the newly created instances.
         """
 
+        if cache is None:
+            cache = {}
+
         child_total = sum(self._ops_count_for_import_page(p) for p in serialized_pages)
         progress = ChildProgressBuilder.build(progress, child_total=child_total)
 
@@ -440,6 +447,7 @@ class PageHandler:
                 files_zip=files_zip,
                 storage=storage,
                 progress=progress,
+                cache=cache,
             )
             imported_pages.append([page_instance, serialized_page])
 
@@ -451,6 +459,7 @@ class PageHandler:
                 files_zip=files_zip,
                 storage=storage,
                 progress=progress,
+                cache=cache,
             )
 
         for page_instance, serialized_page in imported_pages:
@@ -461,6 +470,7 @@ class PageHandler:
                 files_zip=files_zip,
                 storage=storage,
                 progress=progress,
+                cache=cache,
             )
 
         for page_instance, serialized_page in imported_pages:
@@ -471,6 +481,7 @@ class PageHandler:
                 files_zip=files_zip,
                 storage=storage,
                 progress=progress,
+                cache=cache,
             )
 
         return [i[0] for i in imported_pages]
@@ -483,6 +494,7 @@ class PageHandler:
         files_zip: Optional[ZipFile] = None,
         storage: Optional[Storage] = None,
         progress: Optional[ChildProgressBuilder] = None,
+        cache: Optional[Dict[str, any]] = None,
     ):
         """
         Creates an instance using the serialized version previously exported with
@@ -504,6 +516,7 @@ class PageHandler:
             files_zip=files_zip,
             storage=storage,
             progress=progress,
+            cache=cache,
         )[0]
 
     def import_page_only(
@@ -513,6 +526,7 @@ class PageHandler:
         id_mapping: Dict[str, Dict[int, int]],
         files_zip: Optional[ZipFile] = None,
         storage: Optional[Storage] = None,
+        cache: Optional[Dict[str, any]] = None,
         progress: Optional[ChildProgressBuilder] = None,
     ):
         if "builder_pages" not in id_mapping:
@@ -540,6 +554,7 @@ class PageHandler:
         files_zip: Optional[ZipFile] = None,
         storage: Optional[Storage] = None,
         progress: Optional[ChildProgressBuilder] = None,
+        cache: Optional[Dict[str, any]] = None,
     ):
         """
         Import all page data sources.
@@ -560,6 +575,7 @@ class PageHandler:
                 id_mapping,
                 files_zip=files_zip,
                 storage=storage,
+                cache=cache,
             )
             progress.increment(state=IMPORT_SERIALIZED_IMPORTING)
 
@@ -571,6 +587,7 @@ class PageHandler:
         files_zip: Optional[ZipFile] = None,
         storage: Optional[Storage] = None,
         progress: Optional[ChildProgressBuilder] = None,
+        cache: Optional[Dict[str, any]] = None,
     ):
         """
         Import all page elements, dealing with the potential incorrect order regarding
@@ -590,9 +607,6 @@ class PageHandler:
         # That why we are iterating until all elements are created.
         imported_elements = []
 
-        # True if we have imported at least one element on last iteration
-        was_imported = True
-
         # Sort the serialized elements so that we import:
         # Containers first
         # Form elements second
@@ -606,6 +620,8 @@ class PageHandler:
             serialized_elements, key=element_priority_sort, reverse=True
         )
 
+        # True if we have imported at least one element on last iteration
+        was_imported = True
         while was_imported:
             was_imported = False
 
@@ -619,15 +635,17 @@ class PageHandler:
                     parent_element_id is None
                     or parent_element_id in id_mapping.get("builder_page_elements", {})
                 ):
-                    imported_elements.append(
-                        ElementHandler().import_element(
-                            page,
-                            serialized_element,
-                            id_mapping,
-                            files_zip=files_zip,
-                            storage=storage,
-                        )
+                    imported_element = ElementHandler().import_element(
+                        page,
+                        serialized_element,
+                        id_mapping,
+                        files_zip=files_zip,
+                        storage=storage,
+                        cache=cache,
                     )
+
+                    imported_elements.append(imported_element)
+
                     was_imported = True
                     if progress:
                         progress.increment(state=IMPORT_SERIALIZED_IMPORTING)
@@ -642,6 +660,8 @@ class PageHandler:
         files_zip: Optional[ZipFile] = None,
         storage: Optional[Storage] = None,
         progress: Optional[ChildProgressBuilder] = None,
+        cache: Optional[Dict[str, any]] = None,
+        **kwargs,
     ):
         """
         Import all page workflow_actions.
@@ -660,6 +680,12 @@ class PageHandler:
 
         for serialized_workflow_action in serialized_workflow_actions:
             BuilderWorkflowActionHandler().import_workflow_action(
-                page, serialized_workflow_action, id_mapping
+                page,
+                serialized_workflow_action,
+                id_mapping,
+                files_zip=files_zip,
+                storage=storage,
+                cache=cache,
+                **kwargs,
             )
             progress.increment(state=IMPORT_SERIALIZED_IMPORTING)

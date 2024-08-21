@@ -13,7 +13,8 @@
         "integrationsName": "Integrazioni",
         "themeName": "Tema",
         "domainsName": "Domini",
-        "userSourcesName": "Utenti"
+        "userSourcesName": "Utenti",
+        "generalName": "Generale"
     },
     "createPageModal": {
         "header": "Crea pagina",
@@ -71,14 +72,19 @@
         "iframe": "IFrame",
         "authForm": "Modulo di login",
         "authFormDescription": "Un modulo di login utente",
-        "iframeDescription": "Frame in linea"
+        "iframeDescription": "Frame in linea",
+        "repeat": "Ripeti",
+        "repeatDescription": "Un set di elementi ripetibile",
+        "choice": "Scelta",
+        "choiceDescription": "Per valori singoli/multipli"
     },
     "addElementButton": {
         "label": "Elemento"
     },
     "addElementModal": {
         "title": "Aggiungi un nuovo elemento",
-        "searchPlaceholder": "Cerca elementi"
+        "searchPlaceholder": "Cerca elementi",
+        "disabledElementTooltip": "Non disponibile in questo elemento"
     },
     "elementMenu": {
         "moveUp": "Muovi in alto",
@@ -137,15 +143,18 @@
     },
     "userSelector": {
         "viewAs": "Vedi come: {user}",
-        "anonymous": "Anonimo"
+        "anonymous": "Anonimo",
+        "member": "{prefix} membro"
     },
     "dataProviderType": {
         "pageParameter": "Parametro",
         "currentRecord": "Sorgente dati",
         "formData": "Dati del modulo",
-        "dataSource": "Dati",
+        "dataSource": "Record",
         "user": "Utente",
-        "previousAction": "Azione precedente"
+        "previousAction": "Azione precedente",
+        "dataSourceContext": "Opzioni disponibili",
+        "metadata": "Metadati"
     },
     "elementForms": {
         "invalidFormula": "La formula non è valida",
@@ -169,7 +178,9 @@
         "backgroundLabel": "Sfondo",
         "widthLabel": "Larghezza",
         "boxLeft": "Sinistra",
-        "boxRight": "Destra"
+        "boxRight": "Destra",
+        "backgroundImage": "Immagine",
+        "backgroundImageMode": "Riempimento"
     },
     "openPageWorkflowActionForm": {
         "urlPlaceholder": "Inserisci testo...",
@@ -204,7 +215,7 @@
         "uploadFileButton": "Carica file",
         "altTextTitle": "Testo alternativo",
         "fileSourceTypeURL": "URL",
-        "fileLabel": "File immagine",
+        "fileLabel": "Immagine",
         "invalidUrlError": "L'URL non è valido",
         "fileSourceTypeUpload": "Carica",
         "maxWidthLabel": "Larghezza massima",
@@ -232,7 +243,8 @@
         "columnAmountName": "nessuna colonna | 1 colonna | {columnAmount} colonne",
         "columnAmountTitle": "Layout",
         "columnGapTitle": "Spazio tra le colonne",
-        "columnGapPlaceholder": "Inserisci uno spazio tra le colonne..."
+        "columnGapPlaceholder": "Inserisci uno spazio tra le colonne...",
+        "verticalAlignment": "Allineamento verticale"
     },
     "domainCard": {
         "detailLabel": "Mostra i dettagli",
@@ -303,7 +315,13 @@
         "fieldDefaultName": "Colonna",
         "fieldType": "Tipo",
         "selectSourceFirst": "Seleziona una sorgenti dati di tipo lista per iniziare a configurare i tuoi campi.",
-        "buttonColor": "Colore pulsante"
+        "buttonColor": "Colore pulsante",
+        "refreshFieldsFromDataSource": "aggiorna i campi dalla sorgente di dati",
+        "name": "Nome",
+        "orientation": "Orientamento",
+        "orientationHorizontal": "Orizzontale",
+        "orientationVertical": "Verticale",
+        "buttonLoadMoreLabel": "Mostra altri"
     },
     "tableElement": {
         "showMore": "Mostra di più",
@@ -326,12 +344,14 @@
         "subDomain": "Sottodominio di {domain}"
     },
     "styleBoxForm": {
-        "borderLabel": "Bordo",
-        "paddingLabel": "Padding"
+        "borderLabel": "Dimensione",
+        "paddingLabel": "Padding",
+        "marginLabel": "Margine",
+        "borderColor": "Colore bordo"
     },
     "buttonElementForm": {
         "valuePlaceholder": "Inserisci testo...",
-        "valueLabel": "Testo",
+        "valueLabel": "Testo bottone",
         "buttonColor": "Colore pulsante"
     },
     "buttonElement": {
@@ -349,7 +369,8 @@
         "createRowLabel": "Crea Riga",
         "openPageLabel": "Apri Pagina",
         "updateRowLabel": "Aggiorna Riga",
-        "logoutLabel": "Logout"
+        "logoutLabel": "Logout",
+        "refreshDataSourceLabel": "Aggiorna le sorgenti di dati"
     },
     "notificationWorkflowActionForm": {
         "titleLabel": "Titolo",
@@ -359,7 +380,9 @@
     },
     "collectionFieldType": {
         "text": "Testo",
-        "link": "Collegamento"
+        "link": "Collegamento",
+        "tags": "Tag",
+        "boolean": "Booleano"
     },
     "linkFieldForm": {
         "fieldValueLabel": "URL",
@@ -410,7 +433,9 @@
         "full": "Larghezza intera",
         "normal": "Normale",
         "small": "Piccolo",
-        "medium": "Medio"
+        "medium": "Medio",
+        "fullBleed": "Schermo intero",
+        "fullWidth": "Tutta la larghezza"
     },
     "widthSelector": {
         "widthFull": "Larghezza intera",
@@ -445,7 +470,10 @@
         "urlPlaceholder": "Inserisci una URL...",
         "url": "URL di destinazione",
         "paramsInErrorButton": "Modifica parametri",
-        "paramsInErrorDescription": "I parametri salvati non corrispondono ai parametri di pagina. La pagina è stata probabilmente cancellata o modificata."
+        "paramsInErrorDescription": "I parametri salvati non corrispondono ai parametri di pagina. La pagina è stata probabilmente cancellata o modificata.",
+        "target": "Aperto in...",
+        "targetSelf": "Stesso tab",
+        "targetNewTab": "Nuovo tab"
     },
     "dropdownOptionSelector": {
         "label": "Opzioni",
@@ -480,7 +508,11 @@
         "validationTypeAnyLabel": "Qualsiasi",
         "validationTypeIntegerLabel": "Numero",
         "validationTypeEmailDescription": "Obbliga ad inserire un indirizzo email in questo input.",
-        "validationTypeIntegerDescription": "Obbliga ad inserire un valore numerico per questo input."
+        "validationTypeIntegerDescription": "Obbliga ad inserire un valore numerico per questo input.",
+        "inputTypeTextLabel": "Testo",
+        "inputTypePasswordLabel": "Password",
+        "passwordTypeWarning": "Le password sono dati sensibili. Fai attenzione a come gestisci e salvi le password nella tua applicazione.",
+        "inputType": "Tipo di input"
     },
     "userSourceSettings": {
         "titleAddUserSource": "Nuova sorgente dati",
@@ -523,6 +555,180 @@
     "visibilityForm": {
         "loggedInVisitors": "Visitatori loggati",
         "notLoggedInVisitors": "Visitatori non loggati",
-        "allVisitors": "Tutti i visitatori"
+        "allVisitors": "Tutti i visitatori",
+        "warningTitle": "Manteniamo alti gli standard di sicurezza",
+        "warningMessage": "<a href='https://baserow.io/user-docs/application-builder-element-visibility#note-accessing-hidden-data-via-api' target='_blank'><a href='https://baserow.io/user-docs/application-builder-element-visibility#note-accessing-hidden-data-via-api' target='_blank'>Al momento la visibilità è applicata solo nell'interfaccia utente, i dati sottostanti sono comunque accessibili dall'API. Per favore, consulta la <a href='https://baserow.io/user-docs/application-builder-element-visibility#note-accessing-hidden-data-via-api'>documentazione</a> per maggiori informazioni sulla sicurezza dei dati.",
+        "excludedRolesLabel": "Tutti ad eccezione di",
+        "switchAllowLabel": "Permetti",
+        "switchDisallowLabel": "Nega",
+        "rolesSelectAll": "Seleziona tutti",
+        "rolesDeselectAll": "Deseleziona tutti",
+        "rolesSelectHint": "Selezione uno o più ruoli",
+        "roleTypesHint": "Seleziona un ruolo",
+        "roleTypeAllowAllRoles": "Tutti i ruoli",
+        "roleTypeAllowAllRolesExcept": "Nega ai ruoli...",
+        "roleTypeDisallowAllRolesExcept": "Permetti ai ruoli...",
+        "rolesAllMembersOf": "Tutti i membri di {name}",
+        "noRole": "Nessun ruolo",
+        "errorFetchingRolesTitle": "Non riesco a leggere i ruoli utente",
+        "errorFetchingRolesMessage": "C'è stato un problema nel leggere i ruoli utente."
+    },
+    "generalSettings": {
+        "titleOverview": "Generale",
+        "labelForm": "Favicon",
+        "labelButton": "Carica favicon",
+        "labelDescription": "Scegli una immagine 128x128 pixel di tipo ICO, PNG, GIF or JPEG.",
+        "cantUploadFaviconTitle": "Impossibile caricare Favicon",
+        "cantUploadFaviconDescription": "Non è stato possibile caricare l'immagine favicon. Assicurati che l'immagine sia in uno dei formati supportati.",
+        "cantUpdateApplicationTitle": "Non è stato possibile aggiornare l'applicazione",
+        "cantUpdateApplicationDescription": "Non è stato possibile aggiornare l'applicazione"
+    },
+    "repeatElement": {
+        "empty": "Nessun elemento trovato.",
+        "showMore": "Mostra di più",
+        "missingDataSourceTooltip": "Scegli una sorgente di dati per cominciare ad aggiungere elementi."
+    },
+    "repeatElementForm": {
+        "dataSource": "Sorgente di dati",
+        "itemsPerPagePlaceholder": "Inserisci un valore...",
+        "itemsPerRowLabel": "Elementi per riga",
+        "itemsPerPage": "Elementi per pagina",
+        "itemsPerRowDescription": "Numero di colonne per righe e per tipo di device.",
+        "orientationLabel": "Modailità",
+        "orientationVertical": "Verticale",
+        "orientationHorizontal": "Orizzontale",
+        "buttonLoadMoreLabel": "Mostra altri"
+    },
+    "imageInput": {
+        "labelDescription": "Descrizione di default",
+        "labelButton": "Carica"
+    },
+    "tagsFieldForm": {
+        "fieldValuesLabel": "Valori",
+        "fieldValuesPlaceholder": "Inserisci valori...",
+        "fieldColorsPlaceholder": "Inserisci colori...",
+        "fieldColorsLabel": "Colori"
+    },
+    "userDataProviderType": {
+        "isAuthenticated": "È autenticato",
+        "email": "Email",
+        "username": "Nome utente",
+        "id": "Id",
+        "role": "Ruolo"
+    },
+    "buttonField": {
+        "noLabel": "Senza nome..."
+    },
+    "buttonFieldForm": {
+        "infoMessage": "Per configurare le azioni per questo bottone, apri il tab \"Eventi\" dell'elemento correte.",
+        "labelPlaceholder": "Inserisci un'etichetta..."
+    },
+    "themeConfigBlockType": {
+        "color": "Colori",
+        "typography": "Tipografia",
+        "page": "Pagina",
+        "button": "Bottone",
+        "link": "Link",
+        "image": "Immagine"
+    },
+    "colorThemeConfigBlock": {
+        "primaryColor": "Primario",
+        "secondaryColor": "Secondario",
+        "borderColor": "Bordo",
+        "errorColor": "Errore",
+        "successColor": "Successo",
+        "warningColor": "Avvertimento"
+    },
+    "typographyThemeConfigBlock": {
+        "headingValue": "Titolo <h{i}>",
+        "color": "Colore",
+        "size": "Dimensione",
+        "textAlignment": "Allineamento",
+        "bodyLabel": "Corpo",
+        "fontFamily": "Font",
+        "headingLabel": "Titolo {i} (h{i})"
+    },
+    "buttonThemeConfigBlock": {
+        "hoverState": "Stato hover",
+        "backgroundColor": "Colore di sfondo",
+        "button": "Bottone",
+        "defaultState": "Stato iniziale",
+        "textAlignment": "Allineamento testo",
+        "alignment": "Allineamento",
+        "width": "Larghezza",
+        "textColor": "Colore testo",
+        "borderColor": "Colore bordo",
+        "borderSize": "Dimensione del bordo",
+        "borderRadius": "Raggio del bordo",
+        "padding": "Padding",
+        "fontFamily": "Font",
+        "size": "Dimensione font"
+    },
+    "linkThemeConfigBlock": {
+        "color": "Colore",
+        "link": "Link",
+        "defaultState": "Stato iniziale",
+        "hoverState": "Stato hover",
+        "alignment": "Allineamento",
+        "fontFamily": "Font"
+    },
+    "imageThemeConfigBlock": {
+        "maxWidthLabel": "Larghezza massima",
+        "maxHeightPlaceholder": "Inserisci un'altezza massima",
+        "maxWidthPlaceholder": "Inserisci una larghezza massima",
+        "imageConstraintsLabel": "Vincoli",
+        "imageConstraintFullWidth": "Estendi alla larghezza massima",
+        "imageConstraintCover": "Copertina",
+        "imageConstraintCoverDisabled": "Non disponibile senza un'altezza massima.",
+        "alignment": "Allineamento",
+        "imageConstraintContain": "Contiene",
+        "maxHeightLabel": "Altezza massima",
+        "imageConstraintContainDisabled": "Non disponibile senza una larghezza massima."
+    },
+    "choiceElementForm": {
+        "multiple": "Permetti valori multipli",
+        "display": "Display",
+        "dropdown": "Menu",
+        "checkbox": "Checkbox",
+        "radio": "Radio"
+    },
+    "choiceOptionSelector": {
+        "label": "Opzioni",
+        "value": "Valori",
+        "valuePlaceholder": "Inserisci valore",
+        "name": "Valore mostrato",
+        "optionType": "Tipo di opzione",
+        "dataSource": "Sorgente di dati",
+        "formulas": "Formule",
+        "manual": "Manuale",
+        "addOption": "Aggiungi opzione",
+        "namePlaceholder": "Inserisci nome"
+    },
+    "choiceElement": {
+        "addOptions": "Aggiungi opzioni per iniziare ad usare questo elemento..."
+    },
+    "resetButton": {
+        "reset": "Resetta al valore di default del tema"
+    },
+    "backgroundModes": {
+        "fill": "Riempi",
+        "tile": "Tile",
+        "fit": "Riempimento"
+    },
+    "customStyle": {
+        "themeOverrides": "Valori tema"
+    },
+    "colorThemeConfigBlockType": {
+        "error": "Errore",
+        "warning": "Avvertimento",
+        "primary": "Primario",
+        "secondary": "Secondario",
+        "success": "Successo",
+        "border": "Bordo"
+    },
+    "pageThemeConfigBlock": {
+        "backgroundColor": "Color di sfondo",
+        "backgroundImage": "Immagine di sfonto",
+        "backgroundMode": "Background"
     }
 }

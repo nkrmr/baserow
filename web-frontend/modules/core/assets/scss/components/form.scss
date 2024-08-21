@@ -1,49 +1,71 @@
 .control {
-  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
 
   &.control--align-right {
     display: flex;
     justify-content: right;
   }
 
-  &.control--horizontal,
-  &.control--horizontal-variable {
+  &.control--horizontal {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: row;
     align-items: center;
+    gap: 10px;
+
+    &.control--messages {
+      align-items: start;
+    }
   }
+}
+
+.control--error {
+  .form-input,
+  .dropdown__selected,
+  .form-textarea {
+    border-color: $palette-red-600;
+  }
+
+  .form-input__icon {
+    color: $palette-red-600;
+  }
+}
+
+.control__elements--flex {
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .control__description {
   font-size: 13px;
   line-height: 160%;
-  color: $color-neutral-600;
+  color: $palette-neutral-800;
   margin-bottom: 16px;
 }
 
 .control__label {
-  display: block;
-  font-size: 13px;
+  display: flex;
+  font-size: 16px;
   font-weight: 500;
-  margin-bottom: 12px;
-  @include flex-align-items(3px);
-
-  & + :not(.control__description) {
-    margin-top: 16px;
-  }
+  color: $palette-neutral-1300;
+  margin-bottom: 8px;
+  align-items: center;
+  gap: 5px;
 
   &.control__label--small {
     font-size: 13px;
-
-    & + :not(.control__description) {
-      margin-top: 4px;
-    }
   }
 
   .control--horizontal & {
     flex-basis: 30%;
     font-weight: 500;
+    padding: 10px 0;
     margin: 0;
+
+    &.control__label--small {
+      padding: 15px 0;
+    }
   }
 
   .control--horizontal-variable & {
@@ -53,299 +75,50 @@
   }
 }
 
+.control__wrapper {
+  display: flex;
+  flex-direction: column;
+
+  .control--horizontal & {
+    flex-basis: 100%;
+  }
+
+  .control--horizontal.control--after-input & {
+    flex-basis: 70%;
+    margin-top: 0;
+  }
+}
+
 .control__label-icon {
-  font-size: 16px;
+  margin-right: 6px;
 }
 
 .control__label-right-icon {
+  margin-left: 6px;
   height: 16px;
   top: 3px;
   position: relative;
 }
 
-.control__elements {
-  .control--horizontal & {
-    flex-basis: 70%;
-    margin-top: 0;
-  }
-
-  .control--horizontal-variable & {
-    margin-top: 0;
-    margin-left: 16px;
-  }
-
-  &.control__elements--small {
-    margin-bottom: 16px;
-  }
-}
-
-.control__elements--flex {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
 .control__context {
-  cursor: pointer;
-  color: $color-neutral-900;
-  font-size: 16px;
+  color: $palette-neutral-1100;
+  margin-left: 6px;
 
   &:hover {
     text-decoration: none;
-    color: $color-neutral-500;
+    color: $palette-neutral-500;
   }
-}
-
-.input {
-  appearance: none;
-  display: block;
-  width: 100%;
-  border: 1px solid $palette-neutral-400;
-  padding: 12px 16px;
-  outline: none;
-  line-height: 100%;
-  height: 44px;
-  box-sizing: border-box;
-  @include add-elevation($elevation-low);
-
-  &::placeholder {
-    color: $palette-neutral-700;
-  }
-
-  @include rounded($rounded-md);
-
-  &:active,
-  &:focus {
-    border-color: $palette-blue-500;
-  }
-
-  &.input--error {
-    border-color: $palette-red-600;
-  }
-
-  &.input--monospace {
-    font-family: monospace;
-  }
-
-  &.input--small {
-    height: 36px;
-    padding: 8px 12px;
-  }
-
-  &.input--invisible {
-    color: $white;
-  }
-
-  &[disabled] {
-    color: $palette-neutral-700;
-    box-shadow: none;
-    background-color: $palette-neutral-100;
-  }
-}
-
-.textarea--modal {
-  resize: vertical;
-  height: 22px * 6;
-  line-height: 22px;
-  font-size: 13px;
-}
-
-.input__with-icon {
-  position: relative;
-
-  .input {
-    padding-right: 32px;
-  }
-
-  i {
-    position: absolute;
-    right: 12px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: $color-neutral-500;
-    font-size: 16px;
-  }
-
-  &.input__with-icon--left {
-    .input {
-      padding-left: 32px;
-      padding-right: 8px;
-    }
-
-    i {
-      right: auto;
-      left: 12px;
-    }
-  }
-
-  &.input__with-icon--loading {
-    &::after {
-      content: ' ';
-      margin-top: -7px;
-
-      @include loading(14px);
-      @include absolute(50%, 10px, auto, auto);
-    }
-
-    i {
-      display: none;
-    }
-
-    &.input__with-icon--left::after {
-      left: 10px;
-      right: auto;
-    }
-  }
-}
-
-.radio {
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-  height: 28px;
-  line-height: 28px;
-}
-
-.radio__label {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-
-  .radio.radio--disabled & {
-    color: $color-neutral-700;
-  }
-
-  *[class^='iconoir-'],
-  *[class*=' iconoir-'],
-  *[class^='baserow-icon-'],
-  *[class*=' baserow-icon-'] {
-    font-size: 14px;
-  }
-}
-
-.radio__input {
-  position: relative;
-  width: 16px;
-  height: 16px;
-  margin-right: 8px;
-}
-
-.radio__input input[type='radio'] {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  cursor: pointer;
-}
-
-.radio__input label {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  background-color: #fff;
-  border: 1px solid $color-neutral-600;
-  box-shadow: 0 1px 2px 0 rgba(7, 8, 16, 0.1);
-  cursor: pointer;
-}
-
-.radio--error {
-  .radio__input label {
-    border: 1px solid $palette-red-600;
-  }
-}
-
-.radio__input input[type='radio']:disabled + label {
-  background-color: $palette-neutral-100;
-  box-shadow: none;
-}
-
-.radio__input input[type='radio']:checked + label {
-  // The filling color is hard coded here. we cannot set to $palette-blue-500 because of interpolation issue within a background-image property.
-  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none"><rect width="16" height="16" rx="8" fill="%235190ef"/><circle cx="8" cy="8" r="3" fill="white"/></svg>');
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: 100% 100%;
-  border: none;
-}
-
-.radio__input input[type='radio']:checked + label:hover {
-  // The filling color is hard coded here. we cannot set to $palette-blue-500 because of interpolation issue within a background-image property.
-  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none"><rect width="16" height="16" rx="8" fill="%234783db"/><circle cx="8" cy="8" r="3" fill="white"/></svg>');
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: 100% 100%;
-  border: none;
-}
-
-.radio__input input[type='radio']:disabled:checked + label {
-  // The filling color is hard coded here. we cannot set to $palette-blue-500 because of interpolation issue within a background-image property.
-  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none"><rect width="16" height="16" rx="8" fill="%23CDCECF"/><circle cx="8" cy="8" r="3" fill="white"/></svg>');
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: 100% 100%;
-  border: none;
-}
-
-.radio__loading {
-  width: 16px;
-  height: 16px;
-  margin-right: 8px;
-  position: relative;
-  cursor: wait;
-  user-select: none;
-
-  &:hover,
-  &:focus {
-    box-shadow: none;
-  }
-
-  &::after {
-    content: ' ';
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    margin: -7px;
-    display: block;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    border: 0.2em solid;
-    border-color: $palette-blue-500 transparent $palette-blue-500 transparent;
-    animation: spin infinite 1800ms;
-    animation-timing-function: cubic-bezier(0.785, 0.135, 0.15, 0.86);
-  }
-}
-
-.radio__input .radio__loading {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  border: 2px solid #007bff;
-  border-top-color: transparent;
-  animation: radio__loading 0.5s linear infinite;
 }
 
 .error {
-  margin-top: 14px;
-  color: $palette-red-800;
   font-size: 12px;
-  @include flex-align-items(4px);
+  margin-top: 6px;
+  color: $palette-red-800;
 }
 
 .warning {
-  margin-top: 14px;
-  color: $color-warning-600;
-  font-size: 12px;
+  margin-top: 6px;
+  color: $palette-yellow-600;
 }
 
 .actions {
@@ -380,4 +153,65 @@
       margin-right: 0;
     }
   }
+}
+
+.control__required {
+  margin-left: auto;
+  color: $palette-neutral-900;
+  font-size: 13px;
+  font-weight: normal;
+
+  .control--horizontal & {
+    display: none;
+  }
+}
+
+.control__messages {
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 12px;
+  color: $palette-neutral-1100;
+
+  p {
+    margin: 0;
+  }
+}
+
+.control__messages--error {
+  margin: 0;
+  color: $palette-red-800;
+
+  @include flex-align-items(3px);
+}
+
+.control__messages--warning {
+  margin: 0;
+  color: $palette-yellow-600;
+
+  @include flex-align-items(3px);
+}
+
+.form-section {
+  border-bottom: 1px solid $color-neutral-200;
+  padding-bottom: 15px;
+  margin-bottom: 15px;
+
+  // If we have an horizontal FormGroup
+  // these labels should be grayer for better effect.
+  & .control--horizontal .control__label {
+    color: $color-neutral-700;
+  }
+
+  &:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border: none;
+  }
+}
+
+.form-section__title {
+  font-size: 13px;
+  font-weight: 500;
 }

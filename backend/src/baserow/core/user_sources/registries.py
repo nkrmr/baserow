@@ -1,6 +1,6 @@
 import uuid
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Iterable, Optional, Type, TypeVar
+from typing import Any, Dict, Iterable, List, Optional, Type, TypeVar
 
 from django.contrib.auth.models import AbstractUser
 
@@ -16,6 +16,7 @@ from baserow.core.registry import (
     ModelRegistryMixin,
     Registry,
 )
+from baserow.core.user_sources.constants import DEFAULT_USER_ROLE_PREFIX
 from baserow.core.user_sources.user_source_user import UserSourceUser
 
 from .models import UserSource
@@ -97,25 +98,39 @@ class UserSourceType(
             user_source.auth_providers.all().delete()
             self.after_create(user, user_source, values)
 
-    def serialize_property(self, instance: UserSource, prop_name: str):
+    def serialize_property(
+        self,
+        instance: UserSource,
+        prop_name: str,
+        files_zip=None,
+        storage=None,
+        cache=None,
+    ):
         if prop_name == "order":
             return str(instance.order)
 
         if prop_name == "auth_providers":
             return [
-                ap.get_type().export_serialized(ap)
+                ap.get_type().export_serialized(
+                    ap, files_zip=files_zip, storage=storage, cache=cache
+                )
                 for ap in AppAuthProviderHandler.list_app_auth_providers_for_user_source(
                     instance
                 )
             ]
 
-        return super().serialize_property(instance, prop_name)
+        return super().serialize_property(
+            instance, prop_name, files_zip=files_zip, storage=storage, cache=cache
+        )
 
     def deserialize_property(
         self,
         prop_name: str,
         value: Any,
         id_mapping: Dict[str, Dict[int, int]],
+        files_zip=None,
+        storage=None,
+        cache=None,
         **kwargs,
     ) -> Any:
         if prop_name == "integration_id" and value:
@@ -129,13 +144,24 @@ class UserSourceType(
             else:
                 return value
 
-        return super().deserialize_property(prop_name, value, id_mapping, **kwargs)
+        return super().deserialize_property(
+            prop_name,
+            value,
+            id_mapping,
+            files_zip=files_zip,
+            storage=storage,
+            cache=cache,
+            **kwargs,
+        )
 
     def import_serialized(
         self,
         parent: Any,
         serialized_values: Dict[str, Any],
         id_mapping: Dict[str, Dict[int, int]],
+        files_zip=None,
+        storage=None,
+        cache=None,
         **kwargs,
     ) -> UserSourceSubClass:
         """
@@ -153,10 +179,28 @@ class UserSourceType(
                 auth_provider["type"]
             )
             auth_provider_type.import_serialized(
-                created_user_source, auth_provider, id_mapping
+                created_user_source,
+                auth_provider,
+                id_mapping,
+                files_zip=files_zip,
+                storage=storage,
+                cache=cache,
             )
 
         return created_user_source
+
+    def get_default_user_role(self, user_source: UserSource) -> str:
+        """
+        Generate the Default User Role for the User Source.
+
+        The Visibility permission manager needs a user role to check whether
+        a user has permissions to view a specific element.
+
+        When the User Source does not have roles defined, a default user role
+        is used by the Visibility permission manager to control access to elements.
+        """
+
+        return f"{DEFAULT_USER_ROLE_PREFIX}{user_source.id}"
 
     @abstractmethod
     def gen_uid(self, user_source):
@@ -177,6 +221,15 @@ class UserSourceType(
         :param count: The number of user we want.
         :param search: A search term to filter the users.
         :return: An iterable of users.
+        """
+
+    @abstractmethod
+    def get_roles(self, user_source: UserSource) -> List[str]:
+        """
+        Returns a list of strings representing valid roles for the user_source.
+
+        :param user_source: The user source used to get the roles.
+        :return: A list of roles if any found with the given parameters.
         """
 
     @abstractmethod

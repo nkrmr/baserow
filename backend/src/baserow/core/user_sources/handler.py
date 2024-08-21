@@ -1,5 +1,5 @@
 from ast import Dict
-from typing import Iterable, Optional, Union
+from typing import Iterable, List, Optional, Union
 from zipfile import ZipFile
 
 from django.core.files.storage import Storage
@@ -142,12 +142,21 @@ class UserSourceHandler:
         else:
             return queryset
 
+    def get_all_roles_for_application(self, application: Application) -> List[str]:
+        """Return a sorted list of all unique user roles for a specific application."""
+
+        user_roles = set()
+        for user_source in self.get_user_sources(application):
+            user_roles.update(user_source.get_type().get_roles(user_source))
+
+        return sorted(list(user_roles))
+
     def create_user_source(
         self,
         user_source_type: UserSourceType,
         application: Application,
         before=None,
-        **kwargs
+        **kwargs,
     ) -> UserSource:
         """
         Creates a new user_source for an application.
@@ -196,7 +205,7 @@ class UserSourceHandler:
         self,
         user_source_type: UserSourceType,
         user_source: UserSourceForUpdate,
-        **kwargs
+        **kwargs,
     ) -> UserSource:
         """
         Updates and user_source with values. Will also check if the values are allowed
@@ -267,24 +276,40 @@ class UserSourceHandler:
             queryset=UserSource.objects.filter(application=application)
         )
 
-    def export_user_source(self, user_source):
-        return user_source.get_type().export_serialized(user_source)
+    def export_user_source(
+        self,
+        user_source,
+        files_zip: Optional[ZipFile] = None,
+        storage: Optional[Storage] = None,
+        cache: Optional[Dict] = None,
+    ):
+        return user_source.get_type().export_serialized(
+            user_source,
+            files_zip=files_zip,
+            storage=storage,
+            cache=cache,
+        )
 
     def import_user_source(
         self,
         application,
         serialized_user_source,
         id_mapping,
-        cache: Optional[Dict] = None,
         files_zip: Optional[ZipFile] = None,
         storage: Optional[Storage] = None,
+        cache: Optional[Dict] = None,
     ):
         if "user_sources" not in id_mapping:
             id_mapping["user_sources"] = {}
 
         user_source_type = user_source_type_registry.get(serialized_user_source["type"])
         user_source = user_source_type.import_serialized(
-            application, serialized_user_source, id_mapping, cache=cache
+            application,
+            serialized_user_source,
+            id_mapping,
+            files_zip=files_zip,
+            storage=storage,
+            cache=cache,
         )
 
         id_mapping["user_sources"][serialized_user_source["id"]] = user_source.id

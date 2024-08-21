@@ -1,3 +1,4 @@
+// eslint-disable-next-line import/no-named-as-default
 import posthog from 'posthog-js'
 import Vue from 'vue'
 
@@ -16,7 +17,6 @@ export default function ({ app: { router, $config, store } }, inject) {
     autocapture: {
       css_selector_allowlist: ['[ph-autocapture]'],
     },
-    disable_session_recording: true,
   })
 
   inject('posthog', posthog)

@@ -23,18 +23,23 @@
         >
           {{ $t('pagePreview.emptyMessage') }}
         </CallToAction>
-        <AddElementModal ref="addElementModal" :page="page" />
-        <ElementPreview
-          v-for="(element, index) in elements"
-          :key="element.id"
-          is-root-element
-          :element="element"
-          :is-first-element="index === 0"
-          :is-last-element="index === elements.length - 1"
-          :is-copying="copyingElementIndex === index"
-          @move="moveElement(element, $event)"
-        />
+        <div v-else class="page">
+          <ElementPreview
+            v-for="(element, index) in elements"
+            :key="element.id"
+            is-root-element
+            :element="element"
+            :is-first-element="index === 0"
+            :is-last-element="index === elements.length - 1"
+            :is-copying="copyingElementIndex === index"
+            :application-context-additions="{
+              recordIndexPath: [],
+            }"
+            @move="moveElement($event)"
+          />
+        </div>
       </div>
+      <AddElementModal ref="addElementModal" :page="page" />
     </div>
   </ThemeProvider>
 </template>
@@ -57,7 +62,7 @@ export default {
     ElementPreview,
     PreviewNavigationBar,
   },
-  inject: ['page'],
+  inject: ['page', 'workspace'],
   data() {
     return {
       // The element that is currently being copied
@@ -98,6 +103,27 @@ export default {
       return this.$store.getters['element/getElementById'](
         this.page,
         this.elementSelected.parent_element_id
+      )
+    },
+    canCreateElement() {
+      return this.$hasPermission(
+        'builder.page.create_element',
+        this.page,
+        this.workspace.id
+      )
+    },
+    canUpdateSelectedElement() {
+      return this.$hasPermission(
+        'builder.page.element.update',
+        this.elementSelected,
+        this.workspace.id
+      )
+    },
+    canDeleteSelectedElement() {
+      return this.$hasPermission(
+        'builder.page.element.delete',
+        this.elementSelected,
+        this.workspace.id
       )
     },
   },
@@ -174,15 +200,18 @@ export default {
       previewScaled.style.height = `${currentHeight / scale}px`
     },
 
-    async moveElement(element, placement) {
-      if (!element?.id) {
+    async moveElement(placement) {
+      if (!this.elementSelected?.id || !this.canUpdateSelectedElement) {
         return
       }
 
-      const elementType = this.$registry.get('element', element.type)
+      const elementType = this.$registry.get(
+        'element',
+        this.elementSelected.type
+      )
       const placementsDisabled = elementType.getPlacementsDisabled(
         this.page,
-        element
+        this.elementSelected
       )
 
       if (placementsDisabled.includes(placement)) {
@@ -192,23 +221,26 @@ export default {
       try {
         await this.actionMoveElement({
           page: this.page,
-          element,
+          element: this.elementSelected,
           placement,
         })
-        await this.actionSelectElement({ element })
+        await this.actionSelectElement({ element: this.elementSelected })
       } catch (error) {
         notifyIf(error)
       }
     },
-    async selectNextElement(element, placement) {
-      if (!element?.id) {
+    async selectNextElement(placement) {
+      if (!this.elementSelected?.id) {
         return
       }
 
-      const elementType = this.$registry.get('element', element.type)
+      const elementType = this.$registry.get(
+        'element',
+        this.elementSelected.type
+      )
       const placementsDisabled = elementType.getPlacementsDisabled(
         this.page,
-        element
+        this.elementSelected
       )
 
       if (placementsDisabled.includes(placement)) {
@@ -218,7 +250,7 @@ export default {
       try {
         await this.actionSelectNextElement({
           page: this.page,
-          element,
+          element: this.elementSelected,
           placement,
         })
       } catch (error) {
@@ -226,7 +258,7 @@ export default {
       }
     },
     async duplicateElement() {
-      if (!this.elementSelected?.id) {
+      if (!this.elementSelected?.id || !this.canCreateElement) {
         return
       }
 
@@ -242,7 +274,7 @@ export default {
       this.isDuplicating = false
     },
     async deleteElement() {
-      if (!this.elementSelected?.id) {
+      if (!this.elementSelected?.id || !this.canDeleteSelectedElement) {
         return
       }
       try {
@@ -278,30 +310,30 @@ export default {
       switch (e.key) {
         case 'ArrowUp':
           if (alternateAction) {
-            this.moveElement(this.elementSelected, PLACEMENTS.BEFORE)
+            this.moveElement(PLACEMENTS.BEFORE)
           } else {
-            this.selectNextElement(this.elementSelected, PLACEMENTS.BEFORE)
+            this.selectNextElement(PLACEMENTS.BEFORE)
           }
           break
         case 'ArrowDown':
           if (alternateAction) {
-            this.moveElement(this.elementSelected, PLACEMENTS.AFTER)
+            this.moveElement(PLACEMENTS.AFTER)
           } else {
-            this.selectNextElement(this.elementSelected, PLACEMENTS.AFTER)
+            this.selectNextElement(PLACEMENTS.AFTER)
           }
           break
         case 'ArrowLeft':
           if (alternateAction) {
-            this.moveElement(this.elementSelected, PLACEMENTS.LEFT)
+            this.moveElement(PLACEMENTS.LEFT)
           } else {
-            this.selectNextElement(this.elementSelected, PLACEMENTS.LEFT)
+            this.selectNextElement(PLACEMENTS.LEFT)
           }
           break
         case 'ArrowRight':
           if (alternateAction) {
-            this.moveElement(this.elementSelected, PLACEMENTS.RIGHT)
+            this.moveElement(PLACEMENTS.RIGHT)
           } else {
-            this.selectNextElement(this.elementSelected, PLACEMENTS.RIGHT)
+            this.selectNextElement(PLACEMENTS.RIGHT)
           }
           break
         case 'Backspace':

@@ -36,6 +36,11 @@ export default {
       required: false,
       default: false,
     },
+    visible: {
+      type: Boolean,
+      required: false,
+      default: true,
+    },
   },
   data() {
     return {
@@ -69,7 +74,7 @@ export default {
       return this.name.match(regex)
     },
     isActive(value) {
-      if (this.multiple) {
+      if (this.multiple.value) {
         return this.$parent.value.includes(value)
       } else {
         return this.$parent.value === value

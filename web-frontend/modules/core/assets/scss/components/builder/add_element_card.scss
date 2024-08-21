@@ -1,8 +1,9 @@
 .add-element-card {
   border: solid $color-neutral-400 1px;
-  padding: 10px 15px 10px 15px;
+  padding: 10px 15px;
   width: 133px;
   cursor: pointer;
+
   @include rounded($rounded-md);
 
   &:hover {
@@ -11,8 +12,9 @@
   }
 
   &--disabled {
-    cursor: inherit;
-    pointer-events: none;
+    opacity: 0.3;
+    cursor: not-allowed;
+    background-color: $color-neutral-100;
   }
 }
 

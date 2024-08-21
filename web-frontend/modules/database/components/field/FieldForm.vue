@@ -1,97 +1,90 @@
 <template>
   <form class="context__form" @submit.prevent="submit">
-    <FormElement :error="fieldHasErrors('name')" class="control">
-      <div class="control__elements">
-        <input
-          ref="name"
-          v-model="values.name"
-          :class="{ 'input--error': fieldHasErrors('name') }"
-          type="text"
-          class="input input--small"
-          :placeholder="$t('fieldForm.name')"
-          @blur="$v.values.name.$touch()"
-          @input="isPrefilledWithSuggestedFieldName = false"
-          @keydown.enter="handleKeydownEnter($event)"
-        />
-        <div
-          v-if="$v.values.name.$dirty && !$v.values.name.required"
-          class="error"
-        >
+    <FormGroup :error="fieldHasErrors('name')" class="margin-bottom-2">
+      <FormInput
+        ref="name"
+        v-model="values.name"
+        :error="fieldHasErrors('name')"
+        :placeholder="$t('fieldForm.name')"
+        @blur="$v.values.name.$touch()"
+        @input="isPrefilledWithSuggestedFieldName = false"
+        @keydown.enter="handleKeydownEnter($event)"
+      ></FormInput>
+      <template #error>
+        <span v-if="$v.values.name.$dirty && !$v.values.name.required">
           {{ $t('error.requiredField') }}
-        </div>
-        <div
+        </span>
+        <span
           v-else-if="
             $v.values.name.$dirty && !$v.values.name.mustHaveUniqueFieldName
           "
-          class="error"
         >
           {{ $t('fieldForm.fieldAlreadyExists') }}
-        </div>
-        <div
+        </span>
+        <span
           v-else-if="
             $v.values.name.$dirty &&
             !$v.values.name.mustNotClashWithReservedName
           "
-          class="error"
         >
           {{ $t('error.nameNotAllowed') }}
-        </div>
-        <div
-          v-else-if="$v.values.name.$dirty && !$v.values.name.maxLength"
-          class="error"
-        >
+        </span>
+        <span v-else-if="$v.values.name.$dirty && !$v.values.name.maxLength">
           {{ $t('error.nameTooLong') }}
-        </div>
-      </div>
-    </FormElement>
-    <div v-if="forcedType === null" class="control">
-      <div class="control__elements">
-        <Dropdown
-          ref="fieldTypesDropdown"
-          v-model="values.type"
-          :class="{ 'dropdown--error': $v.values.type.$error }"
-          :fixed-items="true"
-          small
-          @hide="$v.values.type.$touch()"
+        </span>
+      </template>
+    </FormGroup>
+
+    <FormGroup
+      v-if="forcedType === null"
+      :error="$v.values.type.$error"
+      class="margin-bottom-2"
+    >
+      <Dropdown
+        ref="fieldTypesDropdown"
+        v-model="values.type"
+        :class="{ 'dropdown--error': $v.values.type.$error }"
+        :fixed-items="true"
+        small
+        @hide="$v.values.type.$touch()"
+      >
+        <DropdownItem
+          v-for="(fieldType, type) in fieldTypes"
+          :key="type"
+          :icon="fieldType.iconClass"
+          :name="fieldType.getName()"
+          :value="fieldType.type"
+          :disabled="
+            (primary && !fieldType.canBePrimaryField) ||
+            !fieldType.isEnabled(workspace) ||
+            fieldType.isDeactivated(workspace.id)
+          "
+          @click="clickOnDeactivatedItem($event, fieldType)"
         >
-          <DropdownItem
-            v-for="(fieldType, type) in fieldTypes"
-            :key="type"
-            :icon="fieldType.iconClass"
-            :name="fieldType.getName()"
-            :value="fieldType.type"
-            :disabled="
-              (primary && !fieldType.canBePrimaryField) ||
-              !fieldType.isEnabled(workspace) ||
-              fieldType.isDeactivated(workspace.id)
+          <i class="select__item-icon" :class="fieldType.iconClass" />
+          <span class="select__item-name-text" :title="fieldType.getName()">{{
+            fieldType.getName()
+          }}</span>
+          <i
+            v-if="fieldType.isDeactivated(workspace.id)"
+            class="iconoir-lock"
+          ></i>
+          <component
+            :is="fieldType.getDeactivatedClickModal(workspace.id)"
+            :ref="'deactivatedClickModal-' + fieldType.type"
+            :v-if="
+              fieldType.isDeactivated(workspace.id) &&
+              fieldType.getDeactivatedClickModal(workspace.id)
             "
-            @click="clickOnDeactivatedItem($event, fieldType)"
-          >
-            <i class="select__item-icon" :class="fieldType.iconClass" />
-            <span class="select__item-name-text" :title="fieldType.getName()">{{
-              fieldType.getName()
-            }}</span>
-            <i
-              v-if="fieldType.isDeactivated(workspace.id)"
-              class="iconoir-lock"
-            ></i>
-            <component
-              :is="fieldType.getDeactivatedClickModal(workspace.id)"
-              :ref="'deactivatedClickModal-' + fieldType.type"
-              :v-if="
-                fieldType.isDeactivated(workspace.id) &&
-                fieldType.getDeactivatedClickModal(workspace.id)
-              "
-              :name="$t(fieldType.getName())"
-              :workspace="workspace"
-            ></component>
-          </DropdownItem>
-        </Dropdown>
-        <div v-if="$v.values.type.$error" class="error">
-          {{ $t('error.requiredField') }}
-        </div>
-      </div>
-    </div>
+            :name="$t(fieldType.getName())"
+            :workspace="workspace"
+          ></component>
+        </DropdownItem>
+      </Dropdown>
+
+      <template #error> {{ $t('error.requiredField') }}</template>
+    </FormGroup>
+
     <template v-if="hasFormComponent">
       <component
         :is="getFormComponent(values.type)"
@@ -104,10 +97,31 @@
         :name="values.name"
         :default-values="defaultValues"
         :database="database"
+        class="margin-bottom-2"
         @validate="$v.$touch"
         @suggested-field-name="handleSuggestedFieldName($event)"
       />
     </template>
+
+    <FormGroup
+      v-if="showDescription"
+      class="margin-bottom-2"
+      :error="fieldHasErrors('description')"
+      :label="$t('fieldForm.description')"
+      :small-label="true"
+    >
+      <div class="control__elements">
+        <FormTextarea
+          ref="description"
+          v-model="values.description"
+          :min-rows="1"
+          :max-rows="16"
+          auto-expandable
+          :placeholder="$t('fieldForm.description')"
+          size="small"
+        />
+      </div>
+    </FormGroup>
     <slot v-if="!selectedFieldIsDeactivated"></slot>
   </form>
 </template>
@@ -115,6 +129,7 @@
 <script>
 import { mapGetters } from 'vuex'
 import { required, maxLength } from 'vuelidate/lib/validators'
+import FormTextarea from '@baserow/modules/core/components/FormTextarea'
 
 import { getNextAvailableNameInSequence } from '@baserow/modules/core/utils/string'
 import form from '@baserow/modules/core/mixins/form'
@@ -126,6 +141,7 @@ import {
 // @TODO focus form on open
 export default {
   name: 'FieldForm',
+  components: { FormTextarea },
   mixins: [form],
   props: {
     table: {
@@ -158,13 +174,15 @@ export default {
   },
   data() {
     return {
-      allowedValues: ['name', 'type'],
+      allowedValues: ['name', 'type', 'description'],
       values: {
         name: '',
         type: this.forcedType || '',
+        description: null,
       },
       isPrefilledWithSuggestedFieldName: false,
       oldValueType: null,
+      showDescription: false,
     }
   },
   computed: {
@@ -276,6 +294,26 @@ export default {
       if (fieldType.isDeactivated(this.workspace.id)) {
         this.$refs[`deactivatedClickModal-${fieldType.type}`][0].show()
       }
+    },
+    /**
+     * This sets the showDescription flag to display description text editor, even
+     * if values.description is empty.
+     *
+     * Used by parent components.
+     */
+    showDescriptionField() {
+      this.showDescription = true
+      this.$nextTick(() => {
+        this.$refs.description.focus()
+      })
+    },
+    /**
+     * Helper method to get information if description is not empty.
+     * Used by parent components
+     */
+    isDescriptionFieldNotEmpty() {
+      this.showDescription = !!this.values.description
+      return this.showDescription
     },
   },
 }

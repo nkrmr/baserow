@@ -151,7 +151,7 @@ export class TestApp {
       return Papa.parse(str).data[0]
     }
     this._app.$papa = Papa
-    this.mockServer = new MockServer(this.mock, this.store)
+    this.mockServer = this.setupMockServer()
     this.failTestOnErrorResponse = true
     this._app.client.interceptors.response.use(
       (response) => {
@@ -165,6 +165,10 @@ export class TestApp {
       }
     )
     this._wrappers = []
+  }
+
+  setupMockServer() {
+    return new MockServer(this.mock, this.store)
   }
 
   dontFailOnErrorResponses() {
@@ -299,7 +303,7 @@ export const UIHelpers = {
   },
   getDisabledSidebarItemNames(sidebarComponent) {
     return sidebarComponent
-      .findAll('.sidebar__nav .tree__action--disabled')
+      .findAll('.sidebar__nav .tree__action--deactivated')
       .wrappers.map((t) => t.text())
   },
   async selectSidebarItem(sidebarComponent, itemName) {

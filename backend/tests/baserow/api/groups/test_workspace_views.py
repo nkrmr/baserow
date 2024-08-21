@@ -383,6 +383,7 @@ def test_workspace_settings_override_global_generative_ai_settings(
     assert response.json()[0]["generative_ai_models_enabled"] == {
         "test_generative_ai": ["test_1"],
         "test_generative_ai_prompt_error": ["test_1"],
+        "test_generative_ai_with_files": ["test_1"],
     }
 
     response = api_client.patch(
@@ -414,6 +415,7 @@ def test_workspace_settings_override_global_generative_ai_settings(
         "generative_ai_models_enabled": {
             "test_generative_ai": ["wp_model_setting"],  # it was "test_1"
             "test_generative_ai_prompt_error": ["test_1"],
+            "test_generative_ai_with_files": ["test_1"],
         },
     }
 
@@ -425,3 +427,22 @@ def test_workspace_settings_override_global_generative_ai_settings(
     assert response.status_code == HTTP_200_OK
     settings = response.json()[0]["generative_ai_models_enabled"]
     assert settings["test_generative_ai"] == ["wp_model_setting"]  # it was "test_1"
+
+
+@pytest.mark.django_db
+def test_create_initial_workspace(api_client, data_fixture):
+    user, token = data_fixture.create_user_and_token(first_name="Test1")
+
+    response = api_client.post(
+        reverse("api:workspaces:create_initial_workspace"),
+        format="json",
+        HTTP_AUTHORIZATION=f"JWT {token}",
+    )
+    assert response.status_code == HTTP_200_OK
+    json_response = response.json()
+    workspace_user = WorkspaceUser.objects.filter(user=user.id).first()
+    assert workspace_user.order == 1
+    assert workspace_user.order == json_response["order"]
+    assert workspace_user.workspace.id == json_response["id"]
+    assert workspace_user.workspace.name == "Test1's workspace"
+    assert workspace_user.user == user

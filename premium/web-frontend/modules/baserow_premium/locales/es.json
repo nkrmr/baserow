@@ -362,14 +362,16 @@
         "modeMentionsTitle": "Sólo menciones"
     },
     "gridViewFieldAI": {
-        "regenerate": "Re-generar",
+        "regenerate": "Regenerar",
         "generate": "Generar"
     },
     "fieldAISubForm": {
         "AIType": "Tipo de IA",
         "AIModel": "Modelo de IA",
         "prompt": "Pregunta",
-        "premiumFeature": "El campo de IA es una función premium"
+        "premiumFeature": "El campo de IA es una función premium",
+        "emptyFileField": "Ninguno",
+        "fileFieldHelp": "El primer archivo compatible del campo se utilizará como base de conocimientos para la consulta. El archivo tiene que ser un archivo de texto con la extensión de archivo compatible como .txt, .md, .pdf, .docx."
     },
     "rowEditFieldAI": {
         "generate": "Generar",
@@ -381,5 +383,17 @@
     },
     "functionalGridViewFieldAI": {
         "generate": "Generar"
+    },
+    "aiFormulaModal": {
+        "generate": "Generar",
+        "noModels": "Tu instancia de Baserow y tu espacio de trabajo no tienen ningún modelo AI configurado. Haz clic en los tres puntos junto a tu espacio de trabajo y luego en configuración para configurarlos.",
+        "title": "Generar fórmulas con IA",
+        "description": "Ten en cuenta que las fórmulas generadas pueden no funcionar siempre como se espera. Estamos construyendo un indicador para el modelo, y cargamos la salida en la entrada de la fórmula. Funciona mejor con un modelo de parámetros altos como gpt-4-turbo-preview.",
+        "label": "Pregunta",
+        "labelDescription": "Describe la fórmula que deseas generar"
+    },
+    "formulaFieldAI": {
+        "generateWithAI": "Generar con IA",
+        "featureName": "Generar fórmulas con IA"
     }
 }

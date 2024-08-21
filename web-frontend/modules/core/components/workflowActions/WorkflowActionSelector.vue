@@ -1,10 +1,10 @@
 <template>
-  <div class="workflow-action-selector">
+  <FormGroup>
     <Dropdown
-      class="workflow-action-selector__options"
       :value="workflowActionType.getType()"
       :show-search="false"
       :disabled="disabled"
+      small
       @change="$emit('change', $event)"
     >
       <DropdownItem
@@ -14,12 +14,11 @@
         :value="availableWorkflowActionType.getType()"
       ></DropdownItem>
     </Dropdown>
-    <div class="margin-left-2">
-      <a class="anchor" @click="$emit('delete')">
-        <i class="iconoir-trash"></i>
-      </a>
-    </div>
-  </div>
+
+    <template #after-input>
+      <ButtonIcon icon="iconoir-bin" @click="$emit('delete')" />
+    </template>
+  </FormGroup>
 </template>
 
 <script>

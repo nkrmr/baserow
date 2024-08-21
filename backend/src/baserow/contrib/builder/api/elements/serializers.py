@@ -7,12 +7,14 @@ from drf_spectacular.utils import extend_schema_field, extend_schema_serializer
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
+from baserow.api.user_files.serializers import UserFileField
+from baserow.contrib.builder.api.validators import image_file_validation
 from baserow.contrib.builder.api.workflow_actions.serializers import (
     BuilderWorkflowActionSerializer,
 )
 from baserow.contrib.builder.elements.models import (
+    ChoiceElementOption,
     CollectionField,
-    DropdownElementOption,
     Element,
 )
 from baserow.contrib.builder.elements.registries import (
@@ -42,6 +44,12 @@ class ElementSerializer(serializers.ModelSerializer):
     def get_type(self, instance):
         return element_type_registry.get_by_model(instance.specific_class).type
 
+    style_background_file = UserFileField(
+        allow_null=True,
+        help_text="The background image file",
+        validators=[image_file_validation],
+    )
+
     class Meta:
         model = Element
         fields = (
@@ -52,21 +60,30 @@ class ElementSerializer(serializers.ModelSerializer):
             "parent_element_id",
             "place_in_container",
             "visibility",
+            "styles",
             "style_border_top_color",
             "style_border_top_size",
             "style_padding_top",
+            "style_margin_top",
             "style_border_bottom_color",
             "style_border_bottom_size",
             "style_padding_bottom",
+            "style_margin_bottom",
             "style_border_left_color",
             "style_border_left_size",
             "style_padding_left",
+            "style_margin_left",
             "style_border_right_color",
             "style_border_right_size",
             "style_padding_right",
+            "style_margin_right",
             "style_background",
             "style_background_color",
+            "style_background_file",
+            "style_background_mode",
             "style_width",
+            "role_type",
+            "roles",
         )
         extra_kwargs = {
             "id": {"read_only": True},
@@ -99,6 +116,12 @@ class CreateElementSerializer(serializers.ModelSerializer):
         "the given id.",
     )
 
+    style_background_file = UserFileField(
+        allow_null=True,
+        help_text="The background image file",
+        validators=[image_file_validation],
+    )
+
     class Meta:
         model = Element
         fields = (
@@ -108,44 +131,70 @@ class CreateElementSerializer(serializers.ModelSerializer):
             "parent_element_id",
             "place_in_container",
             "visibility",
+            "styles",
             "style_border_top_color",
             "style_border_top_size",
             "style_padding_top",
+            "style_margin_top",
             "style_border_bottom_color",
             "style_border_bottom_size",
             "style_padding_bottom",
+            "style_margin_bottom",
             "style_border_left_color",
             "style_border_left_size",
             "style_padding_left",
+            "style_margin_left",
             "style_border_right_color",
             "style_border_right_size",
             "style_padding_right",
+            "style_margin_right",
             "style_background",
             "style_background_color",
+            "style_background_file",
+            "style_background_mode",
             "style_width",
         )
+        extra_kwargs = {
+            "visibility": {"default": Element.VISIBILITY_TYPES.ALL},
+            "styles": {"default": dict},
+        }
 
 
 class UpdateElementSerializer(serializers.ModelSerializer):
+    style_background_file = UserFileField(
+        allow_null=True,
+        help_text="The background image file",
+        validators=[image_file_validation],
+    )
+
     class Meta:
         model = Element
         fields = (
             "visibility",
+            "styles",
             "style_border_top_color",
             "style_border_top_size",
             "style_padding_top",
+            "style_margin_top",
             "style_border_bottom_color",
             "style_border_bottom_size",
             "style_padding_bottom",
+            "style_margin_bottom",
             "style_border_left_color",
             "style_border_left_size",
             "style_padding_left",
+            "style_margin_left",
             "style_border_right_color",
             "style_border_right_size",
             "style_padding_right",
+            "style_margin_right",
             "style_background",
             "style_background_color",
+            "style_background_file",
+            "style_background_mode",
             "style_width",
+            "role_type",
+            "roles",
         )
 
 
@@ -209,7 +258,7 @@ class CollectionFieldSerializer(serializers.ModelSerializer):
     object.
     """
 
-    default_allowed_fields = ["name", "type", "id"]
+    default_allowed_fields = ["name", "type", "id", "uid"]
 
     config = serializers.DictField(
         required=False,
@@ -300,7 +349,7 @@ class UpdateCollectionFieldSerializer(serializers.ModelSerializer):
     value = FormulaSerializerField(allow_blank=True)
 
 
-class DropdownOptionSerializer(serializers.ModelSerializer):
+class ChoiceOptionSerializer(serializers.ModelSerializer):
     class Meta:
-        model = DropdownElementOption
+        model = ChoiceElementOption
         fields = ["id", "value", "name"]

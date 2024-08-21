@@ -1,3 +1,4 @@
+import uuid
 from typing import TYPE_CHECKING, Optional
 
 from django.contrib.contenttypes.models import ContentType
@@ -5,6 +6,12 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import SET_NULL, QuerySet
 
+from baserow.contrib.builder.constants import (
+    BACKGROUND_IMAGE_MODES,
+    WIDTHS,
+    HorizontalAlignments,
+    VerticalAlignments,
+)
 from baserow.core.formula.field import FormulaField
 from baserow.core.mixins import (
     CreatedAndUpdatedOnMixin,
@@ -20,30 +27,15 @@ if TYPE_CHECKING:
     from baserow.contrib.builder.pages.models import Page
 
 
-class HorizontalAlignments(models.TextChoices):
-    LEFT = "left"
-    CENTER = "center"
-    RIGHT = "right"
-
-
-class VerticalAlignments(models.TextChoices):
-    TOP = "top"
-    CENTER = "center"
-    BOTTOM = "bottom"
-
-
-class WIDTHS(models.TextChoices):
-    AUTO = "auto"
-    FULL = "full"
-
-
 class BackgroundTypes(models.TextChoices):
     NONE = "none"
     COLOR = "color"
+    IMAGE = "image"
 
 
 class WidthTypes(models.TextChoices):
     FULL = "full"
+    FULL_WIDTH = "full-width"
     NORMAL = "normal"
     MEDIUM = "medium"
     SMALL = "small"
@@ -56,6 +48,14 @@ class INPUT_TEXT_TYPES(models.TextChoices):
 
 def get_default_element_content_type():
     return ContentType.objects.get_for_model(Element)
+
+
+def get_default_table_orientation():
+    return {
+        "smartphone": "horizontal",
+        "tablet": "horizontal",
+        "desktop": "horizontal",
+    }
 
 
 class Element(
@@ -76,6 +76,11 @@ class Element(
         ALL = "all"
         LOGGED_IN = "logged-in"
         NOT_LOGGED = "not-logged"
+
+    class ROLE_TYPES(models.TextChoices):
+        ALLOW_ALL = "allow_all"
+        ALLOW_ALL_EXCEPT = "allow_all_except"
+        DISALLOW_ALL_EXCEPT = "disallow_all_except"
 
     page = models.ForeignKey("builder.Page", on_delete=models.CASCADE)
     order = models.DecimalField(
@@ -101,6 +106,23 @@ class Element(
         related_name="children",
     )
 
+    role_type = models.CharField(
+        choices=ROLE_TYPES.choices,
+        max_length=19,
+        default=ROLE_TYPES.ALLOW_ALL,
+        db_index=True,
+        # TODO: null=True to be removed in the next release.
+        #   See: https://gitlab.com/baserow/baserow/-/issues/2724
+        null=True,
+    )
+    roles = models.JSONField(
+        default=list,
+        help_text="User roles associated with this element, used in conjunction with role_type.",
+        # TODO: null=True to be removed in the next release.
+        #   See: https://gitlab.com/baserow/baserow/-/issues/2724
+        null=True,
+    )
+
     # The following fields are used to store the position of the element in the
     # container. If the element is a root element then this is null.
     place_in_container = models.CharField(
@@ -115,8 +137,13 @@ class Element(
         choices=VISIBILITY_TYPES.choices,
         max_length=20,
         default=VISIBILITY_TYPES.ALL,
-        null=True,  # TODO remove me in next release
         db_index=True,
+    )
+
+    styles = models.JSONField(
+        default=dict,
+        help_text="The theme overrides for this element",
+        null=True,  # TODO zdm remove me in next release
     )
 
     style_border_top_color = models.CharField(
@@ -131,6 +158,11 @@ class Element(
     style_padding_top = models.PositiveIntegerField(
         default=10, help_text="Padding size of the top border."
     )
+    style_margin_top = models.PositiveIntegerField(
+        default=0,
+        help_text="Margin size of the top border.",
+        null=True,  # TODO zdm remove me after v1.26
+    )
 
     style_border_bottom_color = models.CharField(
         max_length=20,
@@ -143,6 +175,11 @@ class Element(
     )
     style_padding_bottom = models.PositiveIntegerField(
         default=10, help_text="Padding size of the bottom border."
+    )
+    style_margin_bottom = models.PositiveIntegerField(
+        default=0,
+        help_text="Margin size of the bottom border.",
+        null=True,  # TODO zdm remove me after v1.26
     )
 
     style_border_left_color = models.CharField(
@@ -157,6 +194,11 @@ class Element(
     style_padding_left = models.PositiveIntegerField(
         default=20, help_text="Padding size of the left border."
     )
+    style_margin_left = models.PositiveIntegerField(
+        default=0,
+        help_text="Margin size of the left border.",
+        null=True,  # TODO zdm remove me after v1.26
+    )
 
     style_border_right_color = models.CharField(
         max_length=20,
@@ -170,6 +212,11 @@ class Element(
     style_padding_right = models.PositiveIntegerField(
         default=20, help_text="Padding size of the right border."
     )
+    style_margin_right = models.PositiveIntegerField(
+        default=0,
+        help_text="Margin size of the right border.",
+        null=True,  # TODO zdm remove me after v1.26
+    )
 
     style_background = models.CharField(
         choices=BackgroundTypes.choices,
@@ -182,6 +229,22 @@ class Element(
         default="#ffffffff",
         blank=True,
         help_text="The background color if `style_background` is color.",
+    )
+
+    style_background_file = models.ForeignKey(
+        UserFile,
+        null=True,
+        on_delete=models.SET_NULL,
+        related_name="element_background_image_file",
+        help_text="An image file uploaded by the user to be used as element background",
+    )
+
+    style_background_mode = models.CharField(
+        help_text="The mode of the background image",
+        choices=BACKGROUND_IMAGE_MODES.choices,
+        max_length=32,
+        default=BACKGROUND_IMAGE_MODES.FILL,
+        null=True,  # TODO zdm remove me after v1.26
     )
 
     style_width = models.CharField(
@@ -357,12 +420,16 @@ class HeadingElement(Element):
     level = models.IntegerField(
         choices=HeadingLevel.choices, default=1, help_text="The level of the heading"
     )
+
+    # TODO zdm remove following fields in next release (after 1.26)
     font_color = models.CharField(
         max_length=20,
         default="default",
         blank=True,
         help_text="The font color of the heading",
     )
+
+    # TODO zdm remove following fields in next release (after 1.26)
     alignment = models.CharField(
         choices=HorizontalAlignments.choices,
         max_length=10,
@@ -380,42 +447,39 @@ class TextElement(Element):
         MARKDOWN = "markdown"
 
     value = FormulaField(default="")
-    alignment = models.CharField(
-        choices=HorizontalAlignments.choices,
-        max_length=10,
-        default=HorizontalAlignments.LEFT,
-    )
     format = models.CharField(
         choices=TEXT_FORMATS.choices,
         help_text="The format of the text",
         max_length=10,
         default=TEXT_FORMATS.PLAIN,
     )
+    # TODO zdm remove following fields in next release (after 1.26)
+    alignment = models.CharField(
+        choices=HorizontalAlignments.choices,
+        max_length=10,
+        default=HorizontalAlignments.LEFT,
+    )
 
 
-class LinkElement(Element):
+class NavigationElementMixin(models.Model):
     """
-    A simple link.
+    Abstract base class for navigation elements.
     """
 
     class NAVIGATION_TYPES(models.TextChoices):
         PAGE = "page"
         CUSTOM = "custom"
 
-    class VARIANTS(models.TextChoices):
-        LINK = "link"
-        BUTTON = "button"
-
     class TARGETS(models.TextChoices):
         SELF = "self"
         BLANK = "blank"
 
-    value = FormulaField(default="")
     navigation_type = models.CharField(
         choices=NAVIGATION_TYPES.choices,
         help_text="The navigation type.",
         max_length=10,
         default=NAVIGATION_TYPES.PAGE,
+        null=True,
     )
     navigate_to_page = models.ForeignKey(
         "builder.Page",
@@ -429,34 +493,54 @@ class LinkElement(Element):
     navigate_to_url = FormulaField(
         default="",
         help_text="If no page is selected, this indicate the destination of the link.",
+        null=True,
     )
     page_parameters = models.JSONField(
         default=list,
         help_text="The parameters for each parameters of the selected page if any.",
-    )
-
-    variant = models.CharField(
-        choices=VARIANTS.choices,
-        help_text="The variant of the link.",
-        max_length=10,
-        default=VARIANTS.LINK,
+        null=True,
     )
     target = models.CharField(
         choices=TARGETS.choices,
         help_text="The target of the link when we click on it.",
         max_length=10,
         default=TARGETS.SELF,
+        null=True,
     )
+
+    class Meta:
+        abstract = True
+
+
+class LinkElement(Element, NavigationElementMixin):
+    """
+    A simple link.
+    """
+
+    class VARIANTS(models.TextChoices):
+        LINK = "link"
+        BUTTON = "button"
+
+    value = FormulaField(default="")
+    variant = models.CharField(
+        choices=VARIANTS.choices,
+        help_text="The variant of the link.",
+        max_length=10,
+        default=VARIANTS.LINK,
+    )
+    # TODO zdm remove following fields in next release (after 1.26)
     width = models.CharField(
         choices=WIDTHS.choices,
         max_length=10,
         default=WIDTHS.AUTO,
     )
+    # TODO zdm remove following fields in next release (after 1.26)
     alignment = models.CharField(
         choices=HorizontalAlignments.choices,
         max_length=10,
         default=HorizontalAlignments.LEFT,
     )
+    # TODO zdm remove me in next release
     button_color = models.CharField(
         max_length=20,
         default="primary",
@@ -500,11 +584,14 @@ class ImageElement(Element):
         default="",
         blank=True,
     )
+
+    # TODO zdm remove following field in next release (after 1.26)
     alignment = models.CharField(
         choices=HorizontalAlignments.choices,
         max_length=10,
         default=HorizontalAlignments.LEFT,
     )
+    # TODO zdm remove following field in next release (after 1.26)
     style_max_width = models.PositiveIntegerField(
         null=True,
         help_text="The max-width for this image element.",
@@ -514,6 +601,7 @@ class ImageElement(Element):
             MaxValueValidator(100, message="Value cannot be greater than 100."),
         ],
     )
+    # TODO zdm remove following field in next release (after 1.26)
     style_max_height = models.PositiveIntegerField(
         null=True,
         help_text="The max-height for this image element.",
@@ -522,6 +610,7 @@ class ImageElement(Element):
             MaxValueValidator(3000, message="Value cannot be greater than 3000."),
         ],
     )
+    # TODO zdm remove following field in next release (after 1.26)
     style_image_constraint = models.CharField(
         help_text="The image constraint to apply to this image",
         choices=IMAGE_CONSTRAINT_TYPES.choices,
@@ -542,6 +631,7 @@ class FormContainerElement(ContainerElement):
         "values after a successful form submission.",
     )
 
+    # TODO zdm remove following fields in next release (after 1.26)
     button_color = models.CharField(
         max_length=20,
         default="primary",
@@ -604,32 +694,70 @@ class InputTextElement(FormElement):
         choices=INPUT_TEXT_TYPES.choices,
         default=INPUT_TEXT_TYPES.TEXT,
         help_text="The type of the input, not applicable for multiline inputs.",
-        null=True,  # TODO remove me in next release
+        null=True,  # TODO zdm remove me in next release
     )
 
 
-class DropdownElement(FormElement):
+class ChoiceElement(FormElement):
+    class OPTION_TYPE(models.TextChoices):
+        MANUAL = "manual"
+        FORMULAS = "formulas"
+
     label = FormulaField(
         default="",
-        help_text="The text label for this dropdown",
+        help_text="The text label for this choice",
     )
     default_value = FormulaField(
-        default="", help_text="This dropdowns input's default value."
+        default="",
+        help_text="This choice's input default value.",
     )
     placeholder = FormulaField(
         default="",
         help_text="The placeholder text which should be applied to the element.",
     )
+    multiple = models.BooleanField(
+        default=False,
+        help_text="Whether this choice allows users to choose multiple values.",
+        null=True,  # TODO zdm remove me in next release
+    )
+    show_as_dropdown = models.BooleanField(
+        default=True,
+        help_text="Whether to show the choices as a dropdown.",
+        null=True,  # TODO zdm remove me in next release
+    )
+    option_type = models.CharField(
+        choices=OPTION_TYPE.choices,
+        max_length=32,
+        default=OPTION_TYPE.MANUAL,
+        null=True,  # TODO remove me in next release
+    )
+    formula_value = FormulaField(
+        default="",
+        help_text="The value of the option if it is a formula",
+        null=True,  # TODO remove me in next release
+    )
+    formula_name = FormulaField(
+        default="",
+        help_text="The display name of the option if it is a formula",
+        null=True,  # TODO remove me in next release
+    )
 
 
-class DropdownElementOption(models.Model):
+class ChoiceElementOption(models.Model):
     value = models.TextField(
-        blank=True, default="", help_text="The value of the option"
+        blank=True,
+        default="",
+        help_text="The value of the option",
     )
     name = models.TextField(
-        blank=True, default="", help_text="The display name of the option"
+        blank=True,
+        default="",
+        help_text="The display name of the option",
     )
-    dropdown = models.ForeignKey(DropdownElement, on_delete=models.CASCADE)
+    choice = models.ForeignKey(
+        ChoiceElement,
+        on_delete=models.CASCADE,
+    )
 
 
 class CheckboxElement(FormElement):
@@ -650,16 +778,22 @@ class ButtonElement(Element):
     """
 
     value = FormulaField(default="", help_text="The caption of the button.")
+
+    # TODO zdm remove following fields in next release (after 1.26)
     width = models.CharField(
         choices=WIDTHS.choices,
         max_length=10,
         default=WIDTHS.AUTO,
     )
+
+    # TODO zdm remove following fields in next release (after 1.26)
     alignment = models.CharField(
         choices=HorizontalAlignments.choices,
         max_length=10,
         default=HorizontalAlignments.LEFT,
     )
+
+    # TODO zdm remove following fields in next release (after 1.26)
     button_color = models.CharField(
         max_length=20,
         default="primary",
@@ -673,6 +807,7 @@ class CollectionField(models.Model):
     A field of a Collection element
     """
 
+    uid = models.UUIDField(default=uuid.uuid4)
     order = models.PositiveIntegerField()
     name = models.CharField(
         max_length=225,
@@ -718,7 +853,12 @@ class CollectionElement(Element):
         ],
     )
 
-    fields = models.ManyToManyField(CollectionField)
+    button_load_more_label = FormulaField(
+        help_text="The label of the show more button",
+        blank=True,
+        default="",
+        null=True,  # TODO zdm remove me in next release (after 1.26)
+    )
 
     class Meta:
         abstract = True
@@ -729,6 +869,15 @@ class TableElement(CollectionElement):
     A table element
     """
 
+    orientation = models.JSONField(
+        blank=True,
+        null=True,
+        default=get_default_table_orientation,
+        help_text="The table orientation (horizontal or vertical) for each device type",
+    )
+    fields = models.ManyToManyField(CollectionField)
+
+    # TODO zdm remove following fields in next release (after 1.26)
     button_color = models.CharField(
         max_length=20,
         default="primary",
@@ -760,4 +909,26 @@ class IFrameElement(Element):
     height = models.PositiveIntegerField(
         help_text="Height in pixels of the iframe",
         default=300,
+    )
+
+
+class RepeatElement(CollectionElement, ContainerElement):
+    """
+    A container and collection type element which repeats the child elements for each
+    item in the data source that it is bound to.
+    """
+
+    class ORIENTATIONS(models.TextChoices):
+        VERTICAL = "vertical"
+        HORIZONTAL = "horizontal"
+
+    orientation = models.CharField(
+        choices=ORIENTATIONS.choices,
+        max_length=10,
+        default=ORIENTATIONS.VERTICAL,
+    )
+    items_per_row = models.JSONField(
+        default=dict,
+        help_text="The amount repetitions per row, per device type. "
+        "Only applicable when the orientation is horizontal.",
     )

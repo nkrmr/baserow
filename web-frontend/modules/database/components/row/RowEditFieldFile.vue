@@ -33,10 +33,13 @@
       </li>
     </ul>
     <UploadFileDropzone v-if="!readOnly" @input="filesAdded($event)" />
-    <a v-if="!readOnly" class="add" @click.prevent="showModal()">
-      <i class="iconoir-plus add__icon"></i>
+    <ButtonText
+      v-if="!readOnly"
+      icon="iconoir-plus"
+      @click.prevent="showModal()"
+    >
       {{ $t('rowEditFieldFile.addFile') }}
-    </a>
+    </ButtonText>
     <UserFilesModal
       v-if="!readOnly"
       ref="uploadModal"
@@ -104,7 +107,7 @@ export default {
   },
   computed: {
     files() {
-      return this.value.concat(this.filesInProgress)
+      return this.value?.concat(this.filesInProgress)
     },
     uploadFileFunction() {
       return this.uploadFile || UserFileService(this.$client).uploadFile

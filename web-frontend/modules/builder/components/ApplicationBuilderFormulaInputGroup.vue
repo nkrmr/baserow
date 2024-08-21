@@ -1,6 +1,8 @@
 <template>
   <FormulaInputGroup
     v-bind="$attrs"
+    small-label
+    required
     :data-explorer-loading="dataExplorerLoading"
     :data-providers="dataProviders"
     :application-context="
@@ -12,12 +14,17 @@
       }
     "
     v-on="$listeners"
-  ></FormulaInputGroup>
+  >
+    <template #after-input>
+      <slot name="after-input"></slot>
+    </template>
+  </FormulaInputGroup>
 </template>
 
 <script>
 import FormulaInputGroup from '@baserow/modules/core/components/formula/FormulaInputGroup'
 import { DataSourceDataProviderType } from '@baserow/modules/builder/dataProviderTypes'
+
 export default {
   name: 'ApplicationBuilderFormulaInputGroup',
   components: { FormulaInputGroup },

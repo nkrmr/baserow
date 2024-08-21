@@ -1,6 +1,6 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`ViewFilterForm component Default view filter component 1`] = `
+exports[`ViewFilterForm match snapshots Default view filter component 1`] = `
 <div
   class="filters__content"
 >
@@ -34,25 +34,39 @@ exports[`ViewFilterForm component Default view filter component 1`] = `
     <div
       class="filters__actions"
     >
-      <a
-        class="filters__add"
+      <button
+        class="button-text"
       >
         <i
-          class="filters__add-icon iconoir-plus"
+          class="button-text__icon iconoir-plus"
         />
-        
+         
+        <!---->
+         
+        <span
+          class="button-text__label"
+        >
+          
         viewFilterContext.addFilter
-      </a>
+        </span>
+      </button>
        
-      <a
-        class="filters__add"
+      <button
+        class="button-text"
       >
         <i
-          class="filters__add-icon iconoir-plus"
+          class="button-text__icon iconoir-plus"
         />
-        
+         
+        <!---->
+         
+        <span
+          class="button-text__label"
+        >
+          
         viewFilterContext.addFilterGroup
-      </a>
+        </span>
+      </button>
     </div>
      
     <!---->
@@ -60,7 +74,7 @@ exports[`ViewFilterForm component Default view filter component 1`] = `
 </div>
 `;
 
-exports[`ViewFilterForm component Full view filter component 1`] = `
+exports[`ViewFilterForm match snapshots Full view filter component 1`] = `
 <div
   class="filters__content"
 >
@@ -75,7 +89,9 @@ exports[`ViewFilterForm component Full view filter component 1`] = `
       <div
         class="filters__item filters__item--level-1"
       >
-        <div>
+        <div
+          class="filters__operator"
+        >
           <span
             class="filters__operator-where"
           >
@@ -106,6 +122,7 @@ exports[`ViewFilterForm component Full view filter component 1`] = `
                  
                 <span
                   class="dropdown__selected-text"
+                  title="Name"
                 >
                   Name
                 </span>
@@ -252,6 +269,7 @@ exports[`ViewFilterForm component Full view filter component 1`] = `
                  
                 <span
                   class="dropdown__selected-text"
+                  title="viewFilter.is"
                 >
                   viewFilter.is
                 </span>
@@ -563,12 +581,27 @@ exports[`ViewFilterForm component Full view filter component 1`] = `
           </div>
            
           <div
-            class="filters__value filters__value--with-after-input"
+            class="filters__value filters__value--with-input-field"
           >
-            <input
-              class="input filters__value-input input--small"
-              type="text"
-            />
+            <div
+              class="form-input"
+            >
+              <!---->
+               
+              <div
+                class="form-input__wrapper"
+              >
+                <input
+                  autocomplete=""
+                  class="form-input__input"
+                  type="text"
+                />
+                 
+                <!---->
+              </div>
+               
+              <!---->
+            </div>
               
             <!---->
              
@@ -591,7 +624,9 @@ exports[`ViewFilterForm component Full view filter component 1`] = `
       <div
         class="filters__item filters__item--level-1"
       >
-        <div>
+        <div
+          class="filters__operator"
+        >
           <!---->
            
           <div
@@ -607,6 +642,7 @@ exports[`ViewFilterForm component Full view filter component 1`] = `
                
               <span
                 class="dropdown__selected-text"
+                title="viewFilterContext.and"
               >
                 viewFilterContext.and
               </span>
@@ -716,6 +752,7 @@ exports[`ViewFilterForm component Full view filter component 1`] = `
                  
                 <span
                   class="dropdown__selected-text"
+                  title="Stars"
                 >
                   Stars
                 </span>
@@ -862,6 +899,7 @@ exports[`ViewFilterForm component Full view filter component 1`] = `
                  
                 <span
                   class="dropdown__selected-text"
+                  title="viewFilter.is"
                 >
                   viewFilter.is
                 </span>
@@ -1083,7 +1121,7 @@ exports[`ViewFilterForm component Full view filter component 1`] = `
           </div>
            
           <div
-            class="filters__value filters__value--with-after-input"
+            class="filters__value filters__value--with-input-field"
           >
             <div
               class="filters__value-rating"
@@ -1133,25 +1171,39 @@ exports[`ViewFilterForm component Full view filter component 1`] = `
     <div
       class="filters__actions"
     >
-      <a
-        class="filters__add"
+      <button
+        class="button-text"
       >
         <i
-          class="filters__add-icon iconoir-plus"
+          class="button-text__icon iconoir-plus"
         />
-        
+         
+        <!---->
+         
+        <span
+          class="button-text__label"
+        >
+          
         viewFilterContext.addFilter
-      </a>
+        </span>
+      </button>
        
-      <a
-        class="filters__add"
+      <button
+        class="button-text"
       >
         <i
-          class="filters__add-icon iconoir-plus"
+          class="button-text__icon iconoir-plus"
         />
-        
+         
+        <!---->
+         
+        <span
+          class="button-text__label"
+        >
+          
         viewFilterContext.addFilterGroup
-      </a>
+        </span>
+      </button>
     </div>
      
     <div>
@@ -1169,7 +1221,7 @@ exports[`ViewFilterForm component Full view filter component 1`] = `
 </div>
 `;
 
-exports[`ViewFilterForm component Test rating filter 1`] = `
+exports[`ViewFilterForm match snapshots Test rating filter 1`] = `
 <div
   class="filters__content"
 >
@@ -1184,7 +1236,9 @@ exports[`ViewFilterForm component Test rating filter 1`] = `
       <div
         class="filters__item filters__item--level-1"
       >
-        <div>
+        <div
+          class="filters__operator"
+        >
           <span
             class="filters__operator-where"
           >
@@ -1215,6 +1269,7 @@ exports[`ViewFilterForm component Test rating filter 1`] = `
                  
                 <span
                   class="dropdown__selected-text"
+                  title="Stars"
                 >
                   Stars
                 </span>
@@ -1361,6 +1416,7 @@ exports[`ViewFilterForm component Test rating filter 1`] = `
                  
                 <span
                   class="dropdown__selected-text"
+                  title="viewFilter.is"
                 >
                   viewFilter.is
                 </span>
@@ -1583,7 +1639,7 @@ exports[`ViewFilterForm component Test rating filter 1`] = `
           </div>
            
           <div
-            class="filters__value filters__value--with-after-input"
+            class="filters__value filters__value--with-input-field"
           >
             <div
               class="filters__value-rating"
@@ -1633,25 +1689,39 @@ exports[`ViewFilterForm component Test rating filter 1`] = `
     <div
       class="filters__actions"
     >
-      <a
-        class="filters__add"
+      <button
+        class="button-text"
       >
         <i
-          class="filters__add-icon iconoir-plus"
+          class="button-text__icon iconoir-plus"
         />
-        
+         
+        <!---->
+         
+        <span
+          class="button-text__label"
+        >
+          
         viewFilterContext.addFilter
-      </a>
+        </span>
+      </button>
        
-      <a
-        class="filters__add"
+      <button
+        class="button-text"
       >
         <i
-          class="filters__add-icon iconoir-plus"
+          class="button-text__icon iconoir-plus"
         />
-        
+         
+        <!---->
+         
+        <span
+          class="button-text__label"
+        >
+          
         viewFilterContext.addFilterGroup
-      </a>
+        </span>
+      </button>
     </div>
      
     <div>
@@ -1669,7 +1739,7 @@ exports[`ViewFilterForm component Test rating filter 1`] = `
 </div>
 `;
 
-exports[`ViewFilterForm component Test rating filter 2`] = `
+exports[`ViewFilterForm match snapshots Test rating filter 2`] = `
 <div
   class="filters__content"
 >
@@ -1684,7 +1754,9 @@ exports[`ViewFilterForm component Test rating filter 2`] = `
       <div
         class="filters__item filters__item--level-1"
       >
-        <div>
+        <div
+          class="filters__operator"
+        >
           <span
             class="filters__operator-where"
           >
@@ -1715,6 +1787,7 @@ exports[`ViewFilterForm component Test rating filter 2`] = `
                  
                 <span
                   class="dropdown__selected-text"
+                  title="Stars"
                 >
                   Stars
                 </span>
@@ -1861,6 +1934,7 @@ exports[`ViewFilterForm component Test rating filter 2`] = `
                  
                 <span
                   class="dropdown__selected-text"
+                  title="viewFilter.is"
                 >
                   viewFilter.is
                 </span>
@@ -2083,7 +2157,7 @@ exports[`ViewFilterForm component Test rating filter 2`] = `
           </div>
            
           <div
-            class="filters__value filters__value--with-after-input"
+            class="filters__value filters__value--with-input-field"
           >
             <div
               class="filters__value-rating"
@@ -2133,25 +2207,39 @@ exports[`ViewFilterForm component Test rating filter 2`] = `
     <div
       class="filters__actions"
     >
-      <a
-        class="filters__add"
+      <button
+        class="button-text"
       >
         <i
-          class="filters__add-icon iconoir-plus"
+          class="button-text__icon iconoir-plus"
         />
-        
+         
+        <!---->
+         
+        <span
+          class="button-text__label"
+        >
+          
         viewFilterContext.addFilter
-      </a>
+        </span>
+      </button>
        
-      <a
-        class="filters__add"
+      <button
+        class="button-text"
       >
         <i
-          class="filters__add-icon iconoir-plus"
+          class="button-text__icon iconoir-plus"
         />
-        
+         
+        <!---->
+         
+        <span
+          class="button-text__label"
+        >
+          
         viewFilterContext.addFilterGroup
-      </a>
+        </span>
+      </button>
     </div>
      
     <div>

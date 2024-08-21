@@ -1,4 +1,7 @@
-from typing import Any, List, Type, Union
+import re
+from typing import Any, Dict, List, Type, Union
+
+from django.utils.translation import gettext as _
 
 from baserow.contrib.builder.data_providers.exceptions import (
     DataProviderChunkInvalidException,
@@ -12,8 +15,11 @@ from baserow.contrib.builder.data_sources.exceptions import (
     DataSourceImproperlyConfigured,
 )
 from baserow.contrib.builder.data_sources.handler import DataSourceHandler
-from baserow.contrib.builder.elements.element_types import FormElementType
 from baserow.contrib.builder.elements.handler import ElementHandler
+from baserow.contrib.builder.elements.mixins import (
+    CollectionElementTypeMixin,
+    FormElementTypeMixin,
+)
 from baserow.contrib.builder.elements.models import FormElement
 from baserow.contrib.builder.workflow_actions.handler import (
     BuilderWorkflowActionHandler,
@@ -21,8 +27,12 @@ from baserow.contrib.builder.workflow_actions.handler import (
 from baserow.core.formula.exceptions import FormulaRecursion
 from baserow.core.formula.registries import DataProviderType
 from baserow.core.services.dispatch_context import DispatchContext
+from baserow.core.user_sources.constants import DEFAULT_USER_ROLE_PREFIX
+from baserow.core.user_sources.user_source_user import UserSourceUser
 from baserow.core.utils import get_value_at_path
 from baserow.core.workflow_actions.exceptions import WorkflowActionDoesNotExist
+
+RE_DEFAULT_ROLE = re.compile(rf"{DEFAULT_USER_ROLE_PREFIX}(\d+)")
 
 
 class PageParameterDataProviderType(DataProviderType):
@@ -54,7 +64,9 @@ class PageParameterDataProviderType(DataProviderType):
 class FormDataProviderType(DataProviderType):
     type = "form_data"
 
-    def validate_data_chunk(self, element_id: str, data_chunk: Any):
+    def validate_data_chunk(
+        self, element_id: str, data_chunk: Any, dispatch_context: DispatchContext
+    ):
         """
         :param element_id: The ID of the element we're validating.
         :param data_chunk: The form data value which we're validating.
@@ -62,24 +74,32 @@ class FormDataProviderType(DataProviderType):
         """
 
         element: Type[FormElement] = ElementHandler().get_element(element_id)  # type: ignore
-        element_type: FormElementType = element.get_type()  # type: ignore
-        if not element_type.is_valid(element, data_chunk):
+        element_type: FormElementTypeMixin = element.get_type()  # type: ignore
+
+        try:
+            return element_type.is_valid(element, data_chunk, dispatch_context)
+        except FormDataProviderChunkInvalidException as exc:
             raise FormDataProviderChunkInvalidException(
-                f"Form data {data_chunk} is invalid for its element."
+                f"Provided value for form element with ID {element.id} of "
+                f"type {element_type.type} is invalid. {str(exc)}"
             )
 
     def get_data_chunk(self, dispatch_context: DispatchContext, path: List[str]):
-        if len(path) != 1:
+        # The path can come in two lengths:
+        # - 1: The field id alone, if it's single-valued.
+        # - 2a: The field id and '*', if it's multivalued.
+        # - 2b: The field id and an index, if it's multivalued,
+        #   but we're picking a single item.
+        # Any other length is not supported and results in a None return.
+        if not path or len(path) > 2:
             return None
 
-        first_part = path[0]
-        data_chunk = (
-            dispatch_context.request.data.get("form_data", {})
-            .get(first_part, {})
-            .get("value", None)
+        element_id = path[0]
+        data_chunk = get_value_at_path(
+            dispatch_context.request.data.get("form_data", {}), path
         )
-        self.validate_data_chunk(first_part, data_chunk)
-        return data_chunk
+
+        return self.validate_data_chunk(int(element_id), data_chunk, dispatch_context)
 
     def import_path(self, path, id_mapping, **kwargs):
         """
@@ -107,33 +127,14 @@ class DataSourceDataProviderType(DataProviderType):
 
     type = "data_source"
 
-    def get_data_source_by_id(
-        self, dispatch_context: BuilderDispatchContext, data_source_id: int
-    ):
-        """
-        Helper to get data source from a name from the cache or populate the cache
-        if not populated.
-        """
-
-        if "data_sources" not in dispatch_context.cache:
-            dispatch_context.cache[
-                "data_sources"
-            ] = DataSourceHandler().get_data_sources(dispatch_context.page)
-
-        for data_source in dispatch_context.cache["data_sources"]:
-            if data_source.id == data_source_id:
-                return data_source
-
-        raise DataSourceImproperlyConfigured(
-            f"Data source with id {data_source_id} doesn't exist"
-        )
-
     def get_data_chunk(self, dispatch_context: BuilderDispatchContext, path: List[str]):
         """Load a data chunk from a datasource of the page in context."""
 
         data_source_id, *rest = path
 
-        data_source = self.get_data_source_by_id(dispatch_context, int(data_source_id))
+        data_source = DataSourceHandler().get_data_source_with_cache(
+            dispatch_context.page, int(data_source_id)
+        )
 
         # Declare the call and check for recursion
         try:
@@ -177,6 +178,49 @@ class DataSourceDataProviderType(DataProviderType):
         return [str(data_source_id), *rest]
 
 
+class DataSourceContextDataProviderType(DataProviderType):
+    """
+    The data source context provider provides extra metadata related to the data source.
+    """
+
+    type = "data_source_context"
+
+    def get_data_chunk(self, dispatch_context: BuilderDispatchContext, path: List[str]):
+        """Load a data chunk from a datasource of the page in context."""
+
+        data_source_id, *rest = path
+        data_source = DataSourceHandler().get_data_source_with_cache(
+            dispatch_context.page, int(data_source_id)
+        )
+
+        service_type = data_source.service.get_type()
+        context_data = service_type.get_context_data(data_source.service)
+
+        return get_value_at_path(context_data, rest)
+
+    def import_path(self, path: List[str], id_mapping: Dict, **kwargs):
+        """
+        Update the data_source_id of the path, similar to
+        `DataSourceDataProviderType.import_path.`
+        """
+
+        data_source_id, *rest = path
+
+        if "builder_data_sources" in id_mapping:
+            try:
+                data_source_id = id_mapping["builder_data_sources"][int(data_source_id)]
+                data_source = DataSourceHandler().get_data_source(data_source_id)
+            except (KeyError, DataSourceDoesNotExist):
+                # The data source have probably been deleted, so we return the
+                # initial path
+                return [str(data_source_id), *rest]
+
+            service_type = data_source.service.specific.get_type()
+            rest = service_type.import_context_path(rest, id_mapping)
+
+        return [str(data_source_id), *rest]
+
+
 class CurrentRecordDataProviderType(DataProviderType):
     """
     The frontend data provider to get the current row content
@@ -185,9 +229,35 @@ class CurrentRecordDataProviderType(DataProviderType):
     type = "current_record"
 
     def get_data_chunk(self, dispatch_context: BuilderDispatchContext, path: List[str]):
-        """Doesn't make sense in the backend yet"""
+        """
+        Get the current record data from the request data.
 
-        return None
+        :param dispatch_context: The dispatch context.
+        :param path: The path to the data.
+        :return: The data at the path.
+        """
+
+        try:
+            current_record = dispatch_context.request.data["current_record"]
+        except KeyError:
+            return None
+
+        first_collection_element_ancestor = ElementHandler().get_first_ancestor_of_type(
+            dispatch_context.workflow_action.element_id,
+            CollectionElementTypeMixin,
+        )
+        data_source_id = first_collection_element_ancestor.specific.data_source_id
+
+        # Narrow down our range to just our record index.
+        dispatch_context = BuilderDispatchContext.from_context(
+            dispatch_context,
+            offset=current_record,
+            count=1,
+        )
+
+        return DataSourceDataProviderType().get_data_chunk(
+            dispatch_context, [data_source_id, "0", *path]
+        )
 
     def import_path(self, path, id_mapping, data_source_id=None, **kwargs):
         """
@@ -201,6 +271,9 @@ class CurrentRecordDataProviderType(DataProviderType):
 
         # We don't need to import the row index (__idx__)
         if len(path) == 1 and path[0] == "__idx__":
+            return path
+
+        if not data_source_id:
             return path
 
         data_source = DataSourceHandler().get_data_source(data_source_id)
@@ -256,6 +329,20 @@ class UserDataProviderType(DataProviderType):
 
     type = "user"
 
+    def translate_default_user_role(self, user: UserSourceUser) -> str:
+        """
+        Returns the translated version of the user role if it is a default role,
+        otherwise returns the same user_role back without any changes.
+        """
+
+        matches = RE_DEFAULT_ROLE.search(user.role)
+        if not matches:
+            return user.role
+
+        return _("%(user_source_name)s member") % {
+            "user_source_name": user.user_source.name
+        }
+
     def get_data_chunk(self, dispatch_context: DispatchContext, path: List[str]):
         """
         Loads the user_source_user from the request object and expose it to the
@@ -271,8 +358,9 @@ class UserDataProviderType(DataProviderType):
                 "id": user.id,
                 "email": user.email,
                 "username": user.username,
+                "role": self.translate_default_user_role(user),
             }
         else:
-            user = {"id": 0, "username": "", "email": ""}
+            user = {"id": 0, "username": "", "email": "", "role": ""}
 
         return get_value_at_path({"is_authenticated": is_authenticated, **user}, path)

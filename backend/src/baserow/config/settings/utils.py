@@ -1,8 +1,10 @@
 import os
 import traceback
-from typing import Any, Callable, List, NamedTuple, Optional, Union
+from enum import Enum
+from typing import Any, Callable, List, NamedTuple, Optional, Type, Union
 
 from celery.schedules import crontab
+from loguru import logger
 
 
 def setup_dev_e2e(*args, **kwargs):
@@ -32,6 +34,8 @@ def setup_dev_e2e_users_and_instance_id(User, args, kwargs):
 
     from baserow.core.models import Settings
 
+    password = "testpassword"  # nosec B105
+
     if Settings.objects.get().instance_id != "1":
         from baserow.core.user.handler import UserHandler
 
@@ -41,11 +45,14 @@ def setup_dev_e2e_users_and_instance_id(User, args, kwargs):
         for email in ["dev@baserow.io", "e2e@baserow.io"]:
             uname = email.split("@")[0]
             try:
-                user = user_handler.create_user(f"staff-{uname}", email, "testpassword")
+                user = user_handler.create_user(f"staff-{uname}", email, password)
             except UserAlreadyExist:
                 user = User.objects.get(email=email)
             user.is_staff = True
             user.save()
+            logger.info(
+                f"\033[93mCreated staff user: {user.email} with password: {password}\033[0m"
+            )
 
         Settings.objects.update(instance_id="1")
 
@@ -122,3 +129,18 @@ def get_crontab_from_env(env_var_name: str, default_crontab: str) -> crontab:
         env_var_name, default_crontab
     ).split(" ")
     return crontab(minute, hour, day_of_week, day_of_month, month_of_year)
+
+
+def enum_member_by_value(enum: Type[Enum], value: Any) -> Enum:
+    """
+    Given an enum and a value, returns the enum member that has that value.
+
+    :param enum: The enum to search.
+    :param value: The value to search for.
+    :return: The enum member that has the value.
+    """
+
+    for e in enum:
+        if e.value == value:
+            return e
+    raise ValueError(f"No enum member with value {value}")

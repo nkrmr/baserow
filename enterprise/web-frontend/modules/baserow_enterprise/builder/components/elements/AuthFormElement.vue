@@ -44,9 +44,11 @@
         @blur="$v.values.password.$touch()"
       />
     </ABFormGroup>
-    <ABButton :disabled="$v.$error" full-width :loading="loading" size="large">
-      {{ $t('action.login') }}
-    </ABButton>
+    <div :style="getStyleOverride('login_button')" class="auth-form__footer">
+      <ABButton :disabled="$v.$error" :loading="loading" size="large">
+        {{ $t('action.login') }}
+      </ABButton>
+    </div>
   </form>
   <p v-else>{{ $t('authFormElement.selectOrConfigureUserSourceFirst') }}</p>
 </template>
@@ -92,7 +94,7 @@ export default {
       return this.$registry.get('userSource', this.selectedUserSource.type)
     },
     isAuthenticated() {
-      return this.$store.getters['userSourceUser/isAuthenticated']
+      return this.$store.getters['userSourceUser/isAuthenticated'](this.builder)
     },
     loginOptions() {
       if (!this.selectedUserSourceType) {
@@ -131,7 +133,9 @@ export default {
     }),
     async onLogin(event) {
       if (this.isAuthenticated) {
-        await this.$store.dispatch('userSourceUser/logoff')
+        await this.$store.dispatch('userSourceUser/logoff', {
+          application: this.builder,
+        })
       }
 
       this.$v.$touch()
@@ -143,6 +147,7 @@ export default {
       this.hideError()
       try {
         await this.$store.dispatch('userSourceUser/authenticate', {
+          application: this.builder,
           userSource: this.selectedUserSource,
           credentials: {
             email: this.values.email,
@@ -153,7 +158,9 @@ export default {
         this.values.password = ''
         this.values.email = ''
         this.$v.$reset()
-        this.fireAfterLoginEvent()
+        this.fireEvent(
+          this.elementType.getEventByName(this.element, 'after_login')
+        )
       } catch (error) {
         if (error.handler) {
           const response = error.handler.response

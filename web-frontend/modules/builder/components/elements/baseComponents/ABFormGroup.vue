@@ -1,10 +1,11 @@
 <template>
-  <FormElement
+  <FormGroup
     :error="hasError"
     class="ab-form-group"
     :class="{
       'ab-form-group--horizontal': horizontal,
       'ab-form-group--horizontal-variable': horizontalVariable,
+      'ab-form-group--with-label': label,
     }"
   >
     <label
@@ -25,7 +26,7 @@
         {{ errorMessage }}
       </div>
     </div>
-  </FormElement>
+  </FormGroup>
 </template>
 
 <script>

@@ -1,78 +1,65 @@
 <template>
   <div v-if="!isDeactivated">
-    <div class="control">
-      <label class="control__label control__label--small">{{
-        $t('fieldAISubForm.AIType')
-      }}</label>
-      <div class="control__elements">
-        <Dropdown
-          v-model="values.ai_generative_ai_type"
-          class="dropdown--floating"
-          :class="{
-            'dropdown--error': $v.values.ai_generative_ai_type.$error,
-          }"
-          :fixed-items="true"
-          :show-search="false"
-          small
-          @hide="$v.values.ai_generative_ai_type.$touch()"
-          @change="$refs.aiModel.select(aIModelsPerType[0])"
-        >
-          <DropdownItem
-            v-for="aIType in aITypes"
-            :key="aIType"
-            :name="aIType"
-            :value="aIType"
-          />
-        </Dropdown>
+    <SelectAIModelForm
+      :default-values="defaultValues"
+      :database="database"
+      @ai-type-changed="setFileFieldSupported"
+    ></SelectAIModelForm>
+
+    <FormGroup
+      v-if="fileFieldSupported"
+      required
+      small-label
+      class="margin-bottom-2"
+    >
+      <template #label>
+        {{ $t('selectAIModelForm.fileField') }}
+        <HelpIcon
+          :tooltip="$t('fieldAISubForm.fileFieldHelp')"
+          :tooltip-content-classes="['tooltip__content--expandable']"
+        />
+      </template>
+
+      <Dropdown
+        v-model="values.ai_file_field_id"
+        class="dropdown--floating"
+        :class="{
+          'dropdown--error': $v.values.ai_file_field_id.$error,
+        }"
+        :fixed-items="true"
+        :show-search="false"
+        small
+        @hide="$v.values.ai_file_field_id.$touch()"
+      >
+        <DropdownItem
+          :name="$t('fieldAISubForm.emptyFileField')"
+          :value="null"
+        />
+        <DropdownItem
+          v-for="field in fileFields"
+          :key="field.id"
+          :name="field.name"
+          :value="field.id"
+        />
+      </Dropdown>
+    </FormGroup>
+    <FormGroup
+      small-label
+      :label="$t('fieldAISubForm.prompt')"
+      :error="$v.values.ai_prompt.$dirty && $v.values.ai_prompt.$error"
+      required
+      class="margin-bottom-2"
+    >
+      <div style="max-width: 366px">
+        <FormulaInputField
+          v-model="values.ai_prompt"
+          :data-providers="dataProviders"
+          :application-context="applicationContext"
+          :placeholder="$t('fieldAISubForm.promptPlaceholder')"
+        ></FormulaInputField>
       </div>
-    </div>
-    <div class="control">
-      <label class="control__label control__label--small">
-        {{ $t('fieldAISubForm.AIModel') }}
-      </label>
-      <div class="control__elements">
-        <Dropdown
-          ref="aiModel"
-          v-model="values.ai_generative_ai_model"
-          class="dropdown--floating"
-          :class="{
-            'dropdown--error': $v.values.ai_generative_ai_model.$error,
-          }"
-          :fixed-items="true"
-          :show-search="false"
-          small
-          @hide="$v.values.ai_generative_ai_model.$touch()"
-        >
-          <DropdownItem
-            v-for="aIType in aIModelsPerType"
-            :key="aIType"
-            :name="aIType"
-            :value="aIType"
-          />
-        </Dropdown>
-      </div>
-    </div>
-    <div class="control">
-      <label class="control__label control__label--small">
-        {{ $t('fieldAISubForm.prompt') }}
-      </label>
-      <div class="control__elements">
-        <div style="max-width: 366px">
-          <FormulaInputField
-            v-model="values.ai_prompt"
-            :data-providers="dataProviders"
-            :application-context="applicationContext"
-            placeholder="What is Baserow?"
-          ></FormulaInputField>
-        </div>
-        <div
-          v-if="$v.values.ai_prompt.$dirty && $v.values.ai_prompt.$error"
-          class="error"
-        >
-          {{ $t('error.requiredField') }}
-        </div>
-      </div>
-    </div>
+      <template #error> {{ $t('error.requiredField') }}</template>
+    </FormGroup>
   </div>
   <div v-else>
     <p>
@@ -87,23 +74,20 @@ import { required } from 'vuelidate/lib/validators'
 import form from '@baserow/modules/core/mixins/form'
 import fieldSubForm from '@baserow/modules/database/mixins/fieldSubForm'
 import FormulaInputField from '@baserow/modules/core/components/formula/FormulaInputField'
+import SelectAIModelForm from '@baserow/modules/core/components/ai/SelectAIModelForm'
 
 export default {
   name: 'FieldAISubForm',
-  components: { FormulaInputField },
+  components: { SelectAIModelForm, FormulaInputField },
   mixins: [form, fieldSubForm],
   data() {
     return {
-      allowedValues: [
-        'ai_generative_ai_type',
-        'ai_generative_ai_model',
-        'ai_prompt',
-      ],
+      allowedValues: ['ai_prompt', 'ai_file_field_id'],
       values: {
-        ai_generative_ai_type: null,
-        ai_generative_ai_model: null,
         ai_prompt: '',
+        ai_file_field_id: null,
       },
+      fileFieldSupported: false,
     }
   },
   computed: {
@@ -126,27 +110,39 @@ export default {
     dataProviders() {
       return [this.$registry.get('databaseDataProvider', 'fields')]
     },
-    aITypes() {
-      return Object.keys(this.workspace.generative_ai_models_enabled || {})
-    },
-    aIModelsPerType() {
-      return (
-        this.workspace.generative_ai_models_enabled[
-          this.values.ai_generative_ai_type
-        ] || []
-      )
-    },
     isDeactivated() {
       return this.$registry
         .get('field', this.fieldType)
         .isDeactivated(this.workspace.id)
     },
+    fileFields() {
+      return this.allFieldsInTable.filter((field) => {
+        const t = this.$registry.get('field', field.type)
+        return t.canRepresentFiles(field)
+      })
+    },
+  },
+  methods: {
+    setFileFieldSupported(generativeAIType) {
+      if (generativeAIType) {
+        const modelType = this.$registry.get(
+          'generativeAIModel',
+          generativeAIType
+        )
+        this.fileFieldSupported = modelType.canPromptWithFiles()
+      } else {
+        this.fileFieldSupported = false
+      }
+
+      if (!this.fileFieldSupported) {
+        this.values.ai_file_field_id = null
+      }
+    },
   },
   validations: {
     values: {
-      ai_generative_ai_type: { required },
-      ai_generative_ai_model: { required },
       ai_prompt: { required },
+      ai_file_field_id: {},
     },
   },
 }

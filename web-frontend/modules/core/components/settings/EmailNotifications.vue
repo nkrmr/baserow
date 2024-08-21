@@ -2,51 +2,30 @@
   <div>
     <h2 class="box__title">{{ $t('emailNotifications.title') }}</h2>
     <form @submit.prevent="updateEmailNotificationFrequency">
-      <FormElement
+      <FormGroup
+        :label="$t('emailNotifications.label')"
+        :help-text="$t('emailNotifications.description')"
         :error="fieldHasErrors('email_notification_frequency')"
-        class="control"
+        required
       >
-        <label class="control__label">
-          {{ $t('emailNotifications.label') }}
-        </label>
-        <div class="control__description">
-          {{ $t('emailNotifications.description') }}
-        </div>
-        <div class="control__elements">
-          <Radio
-            v-model="values.email_notification_frequency"
-            :value="EMAIL_NOTIFICATIONS_FREQUENCY_OPTIONS.INSTANT"
-          >
-            {{ $t('emailNotifications.instant') }}
-          </Radio>
-          <Radio
-            v-model="values.email_notification_frequency"
-            :value="EMAIL_NOTIFICATIONS_FREQUENCY_OPTIONS.DAILY"
-          >
-            {{ $t('emailNotifications.daily') }}
-          </Radio>
-          <Radio
-            v-model="values.email_notification_frequency"
-            :value="EMAIL_NOTIFICATIONS_FREQUENCY_OPTIONS.WEEKLY"
-          >
-            {{ $t('emailNotifications.weekly') }}
-          </Radio>
-          <Radio
-            v-model="values.email_notification_frequency"
-            :value="EMAIL_NOTIFICATIONS_FREQUENCY_OPTIONS.NEVER"
-          >
-            {{ $t('emailNotifications.never') }}
-          </Radio>
-        </div>
-      </FormElement>
+        <RadioGroup
+          v-model="values.email_notification_frequency"
+          :options="emailNotificationOptions"
+          vertical-layout
+        >
+        </RadioGroup>
+      </FormGroup>
+
       <div class="actions actions--right">
-        <button
-          :class="{ 'button--loading': loading, disabled: submitDisabled }"
-          class="button button--large"
-          :disabled="submitDisabled"
+        <Button
+          type="primary"
+          size="large"
+          :loading="loading"
+          :disabled="submitDisabled || loading"
+          icon="iconoir-bin"
         >
           {{ $t('emailNotifications.submitButton') }}
-        </button>
+        </Button>
       </div>
     </form>
   </div>
@@ -83,6 +62,26 @@ export default {
     },
     EMAIL_NOTIFICATIONS_FREQUENCY_OPTIONS() {
       return EMAIL_NOTIFICATIONS_FREQUENCY_OPTIONS
+    },
+    emailNotificationOptions() {
+      return [
+        {
+          label: this.$t('emailNotifications.instant'),
+          value: EMAIL_NOTIFICATIONS_FREQUENCY_OPTIONS.INSTANT,
+        },
+        {
+          label: this.$t('emailNotifications.daily'),
+          value: EMAIL_NOTIFICATIONS_FREQUENCY_OPTIONS.DAILY,
+        },
+        {
+          label: this.$t('emailNotifications.weekly'),
+          value: EMAIL_NOTIFICATIONS_FREQUENCY_OPTIONS.WEEKLY,
+        },
+        {
+          label: this.$t('emailNotifications.never'),
+          value: EMAIL_NOTIFICATIONS_FREQUENCY_OPTIONS.NEVER,
+        },
+      ]
     },
     ...mapGetters({
       user: 'auth/getUserObject',

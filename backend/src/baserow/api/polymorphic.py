@@ -1,4 +1,3 @@
-from collections import OrderedDict
 from typing import Any, Dict
 
 from rest_framework import serializers
@@ -94,7 +93,7 @@ class PolymorphicSerializer(serializers.Serializer):
         if not self.required and not instance:
             return None
 
-        if isinstance(instance, OrderedDict):
+        if isinstance(instance, dict):
             instance_type = self.get_type_from_mapping(instance)
         else:
             instance = instance.specific
@@ -170,6 +169,7 @@ class PolymorphicSerializer(serializers.Serializer):
                 request=self.request,
                 context=self.context,
                 data=self.data,
+                partial=self.partial,
             )
         except serializers.ValidationError:
             child_valid = False
@@ -193,6 +193,7 @@ class PolymorphicSerializer(serializers.Serializer):
             base_class=self.base_class,
             request=self.request,
             context=self.context,
+            partial=self.partial,
         )
 
         validated_data = serializer.run_validation(data)

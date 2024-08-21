@@ -1,20 +1,17 @@
 <template>
-  <div>
-    <label class="control__label">
-      {{ $t('horizontalAlignmentSelector.alignment') }}
-    </label>
-    <div class="control__elements">
-      <RadioButton
-        v-for="alignment in alignmentValues"
-        :key="alignment.value"
-        v-model="selected"
-        :value="alignment.value"
-        :icon="alignment.icon"
-        :title="$t(alignment.name)"
-        @input="$emit('input', $event)"
-      />
-    </div>
-  </div>
+  <FormGroup
+    small-label
+    required
+    :label="$t('horizontalAlignmentSelector.alignment')"
+  >
+    <RadioGroup
+      v-model="selected"
+      :options="alignmentValues"
+      type="button"
+      @input="$emit('input', $event)"
+    >
+    </RadioGroup>
+  </FormGroup>
 </template>
 
 <script>
@@ -41,7 +38,14 @@ export default {
   },
   computed: {
     alignmentValues() {
-      return Object.values(this.alignments)
+      const values = Object.values(this.alignments)
+      return values.map((value) => {
+        return {
+          icon: value.icon,
+          value: value.value,
+          title: this.$t(value.name),
+        }
+      })
     },
   },
   watch: {

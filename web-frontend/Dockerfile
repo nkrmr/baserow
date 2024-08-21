@@ -1,7 +1,4 @@
-# Pin the version to 18.19 instead of 18 because somehow the ordering of utf-8 chars
-# has changed in 18.20.0 which breaks the ordering compatibility between the frontend
-# and the backend.
-FROM node:18.19-bullseye as base
+FROM node:21.7.3-bookworm as base
 
 ARG UID
 ENV UID=${UID:-9999}
@@ -18,8 +15,6 @@ RUN apt-get update && \
     gnupg2 \
     dos2unix \
     tini \
-    nano \
-    vim \
     git \
     gosu \
     && apt-get autoclean \

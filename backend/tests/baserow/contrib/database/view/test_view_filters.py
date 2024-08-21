@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 from django.db.models import Q
 
 import pytest
+from dateutil.relativedelta import relativedelta
 from freezegun import freeze_time
 from pyinstrument import Profiler
 from pytest_unordered import unordered
@@ -17,6 +18,17 @@ from baserow.contrib.database.views.handler import ViewHandler
 from baserow.contrib.database.views.registries import (
     ViewFilterType,
     view_filter_type_registry,
+)
+from baserow.contrib.database.views.view_filters import (
+    DateFilterOperators,
+    DateIsAfterMultiStepFilterType,
+    DateIsBeforeMultiStepFilterType,
+    DateIsEqualMultiStepFilterType,
+    DateIsNotEqualMultiStepFilterType,
+    DateIsOnOrAfterMultiStepFilterType,
+    DateIsOnOrBeforeMultiStepFilterType,
+    DateIsWithinMultiStepFilterType,
+    DateMultiStepViewFilterType,
 )
 
 
@@ -3613,6 +3625,38 @@ def test_not_empty_filter_type(data_fixture):
 
 
 @pytest.mark.django_db
+def test_not_empty_filter_type_for_link_row_table_with_trashed_rows(data_fixture):
+    user = data_fixture.create_user()
+    table_a, table_b, link_a_to_b = data_fixture.create_two_linked_tables(user=user)
+    table_a_primary_field = table_a.get_primary_field()
+    table_b_primary_field = table_b.get_primary_field()
+    grid_view = data_fixture.create_grid_view(table=table_a)
+
+    table_a_model = table_a.get_model()
+    table_b_model = table_b.get_model()
+    row_b1 = table_b_model.objects.create(**{table_b_primary_field.db_column: "b1"})
+    row_a1 = RowHandler().force_create_row(
+        user,
+        table_a,
+        {table_a_primary_field.db_column: "a1", link_a_to_b.db_column: [row_b1.id]},
+        model=table_a_model,
+    )
+
+    handler = ViewHandler()
+    view_filter = data_fixture.create_view_filter(
+        view=grid_view, field=link_a_to_b, type="not_empty", value=""
+    )
+    assert (
+        handler.apply_filters(grid_view, table_a_model.objects.all()).get().id
+        == row_a1.id
+    )
+
+    RowHandler().delete_row(user, table_b, row_b1, model=table_b_model)
+
+    assert list(handler.apply_filters(grid_view, table_a_model.objects.all())) == []
+
+
+@pytest.mark.django_db
 def test_filename_contains_filter_type(data_fixture):
     user = data_fixture.create_user()
     table = data_fixture.create_database_table(user=user)
@@ -3683,6 +3727,70 @@ def test_filename_contains_filter_type(data_fixture):
         filter_type="AND",
     )
     assert len(results) == 1
+
+
+@pytest.mark.django_db
+def test_filename_contains_filter_type_multiple_filters(data_fixture):
+    user = data_fixture.create_user()
+    table = data_fixture.create_database_table(user=user)
+    grid_view = data_fixture.create_grid_view(table=table)
+    file_field = data_fixture.create_file_field(table=table)
+    handler = ViewHandler()
+    model = table.get_model()
+
+    row_1 = model.objects.create(
+        **{
+            f"field_{file_field.id}": [
+                {"visible_name": "test.png"},
+                {"visible_name": "another.png"},
+            ],
+        }
+    )
+    row_2 = model.objects.create(
+        **{
+            f"field_{file_field.id}": [
+                {"visible_name": "test.doc"},
+                {"visible_name": "test.txt"},
+            ]
+        }
+    )
+    row_3 = model.objects.create(
+        **{
+            f"field_{file_field.id}": [
+                {"visible_name": "another.doc"},
+            ],
+        }
+    )
+
+    view_filter = data_fixture.create_view_filter(
+        view=grid_view,
+        field=file_field,
+        type="filename_contains",
+        value="test",
+    )
+
+    view_filter2 = data_fixture.create_view_filter(
+        view=grid_view,
+        field=file_field,
+        type="filename_contains",
+        value="another",
+    )
+
+    grid_view.filter_type = "AND"
+    grid_view.save()
+
+    ids = [r.id for r in handler.apply_filters(grid_view, model.objects.all()).all()]
+    assert len(ids) == 1
+    assert row_1.id in ids
+
+    grid_view.filter_type = "OR"
+    grid_view.save()
+
+    ids = [r.id for r in handler.apply_filters(grid_view, model.objects.all()).all()]
+    assert len(ids) == 3
+    assert row_1.id in ids
+    assert row_2.id in ids
+    assert row_3.id in ids
 
 
 @pytest.mark.django_db
@@ -5393,6 +5501,109 @@ def test_link_row_contains_filter_type_single_select_field(data_fixture):
 
 
 @pytest.mark.django_db
+def test_link_row_contains_filter_type_uuid_field(data_fixture):
+    user = data_fixture.create_user()
+    database = data_fixture.create_database_application(user=user)
+    table = data_fixture.create_database_table(database=database)
+    related_table = data_fixture.create_database_table(database=database)
+    primary_field = data_fixture.create_text_field(table=table)
+    grid_view = data_fixture.create_grid_view(table=table)
+
+    link_row_field = FieldHandler().create_field(
+        user=user,
+        table=table,
+        type_name="link_row",
+        name="Test",
+        link_row_table=related_table,
+    )
+
+    row_handler = RowHandler()
+
+    related_primary_uuid_field = data_fixture.create_uuid_field(
+        primary=True, table=related_table
+    )
+
+    model = table.get_model()
+    related_model = related_table.get_model()
+
+    related_uuid_row_1 = row_handler.create_row(
+        user=user,
+        table=related_table,
+        model=related_model,
+        values={},
+    )
+
+    related_uuid_row_2 = row_handler.create_row(
+        user=user,
+        table=related_table,
+        model=related_model,
+        values={},
+    )
+
+    row_handler.create_row(
+        user=user,
+        table=table,
+        model=model,
+        values={
+            f"field_{primary_field.id}": "Row 0",
+        },
+    )
+
+    row_1 = row_handler.create_row(
+        user=user,
+        table=table,
+        model=model,
+        values={
+            f"field_{primary_field.id}": "Row 1",
+            f"field_{link_row_field.id}": [related_uuid_row_1.id],
+        },
+    )
+
+    row_handler.create_row(
+        user=user,
+        table=table,
+        model=model,
+        values={
+            f"field_{primary_field.id}": "Row 2",
+            f"field_{link_row_field.id}": [related_uuid_row_2.id],
+        },
+    )
+
+    view_handler = ViewHandler()
+    view_filter = data_fixture.create_view_filter(
+        view=grid_view,
+        field=link_row_field,
+        type="link_row_contains",
+        value=f"",
+    )
+
+    ids = [
+        r.id for r in view_handler.apply_filters(grid_view, model.objects.all()).all()
+    ]
+    assert len(ids) == 3
+
+    uuid_value = str(
+        getattr(related_uuid_row_1, f"field_{related_primary_uuid_field.id}")
+    )
+
+    view_filter.value = uuid_value[:-2]
+    view_filter.save()
+    ids = [
+        r.id for r in view_handler.apply_filters(grid_view, model.objects.all()).all()
+    ]
+    assert len(ids) == 1
+    assert ids == [row_1.id]
+
+    view_filter.value = uuid_value
+    view_filter.save()
+    ids = [
+        r.id for r in view_handler.apply_filters(grid_view, model.objects.all()).all()
+    ]
+    assert len(ids) == 1
+    assert ids == [row_1.id]
+
+
+@pytest.mark.django_db
 def test_link_row_contains_filter_type_multiple_select_field(data_fixture):
     user = data_fixture.create_user()
     database = data_fixture.create_database_application(user=user)
@@ -6623,3 +6834,680 @@ def test_single_select_is_none_of_filter_type(data_fixture):
     ids = [r.id for r in handler.apply_filters(grid_view, model.objects.all()).all()]
     # only the empty row is selected
     assert ids == [rows[4].id]
+
+
+# given today is 2024-05-24, please provide some datetime values for
+# all the DateFilterOperators
+FREEZED_TODAY = datetime(2024, 5, 24, 9, 30, 0, tzinfo=timezone.utc)
+
+# fmt:off
+TEST_MULTI_STEP_DATE_OPERATORS_DATETIMES = [
+    FREEZED_TODAY - relativedelta(days=1),    # 0. yesterday
+    FREEZED_TODAY,                            # 1. today
+    FREEZED_TODAY + relativedelta(days=1),    # 2. tomorrow
+    FREEZED_TODAY - relativedelta(weeks=1),   # 3. a week ago
+    FREEZED_TODAY - relativedelta(months=1),  # 4. a month ago
+    FREEZED_TODAY - relativedelta(years=1),   # 5. a year ago
+    FREEZED_TODAY + relativedelta(weeks=1),   # 6. a week from now
+    FREEZED_TODAY + relativedelta(months=1),  # 7. a month from now
+    FREEZED_TODAY + relativedelta(years=1),   # 8. a year from now
+]
+# fmt:on
+
+MNEMONIC_VALUES = {
+    "-1d": 0,
+    "now": 1,
+    "+1d": 2,
+    "-1w": 3,
+    "-1m": 4,
+    "-1y": 5,
+    "+1w": 6,
+    "+1m": 7,
+    "+1y": 8,
+}
+
+# expected_results contains a list of the valid indexes of the
+# TEST_MULTI_STEP_DATE_OPERATORS_DATETIMES that should be returned when the filter type
+# and the operator is applied to the given dates
+DATE_MULTI_STEP_OPERATOR_VALID_RESULTS = {
+    DateIsEqualMultiStepFilterType.type: {
+        DateFilterOperators.YESTERDAY: {"expected_results": ["-1d"]},
+        DateFilterOperators.TODAY: {"expected_results": ["now"]},
+        DateFilterOperators.TOMORROW: {"expected_results": ["+1d"]},
+        DateFilterOperators.ONE_WEEK_AGO: {"expected_results": ["-1w"]},
+        DateFilterOperators.ONE_MONTH_AGO: {"expected_results": ["-1m"]},
+        DateFilterOperators.ONE_YEAR_AGO: {"expected_results": ["-1y"]},
+        DateFilterOperators.THIS_WEEK: {"expected_results": ["-1d", "now", "+1d"]},
+        DateFilterOperators.THIS_MONTH: {
+            "expected_results": ["-1d", "now", "+1d", "-1w", "+1w"]
+        },
+        DateFilterOperators.THIS_YEAR: {
+            "expected_results": ["-1d", "now", "+1d", "-1w", "-1m", "+1w", "+1m"]
+        },
+        DateFilterOperators.NEXT_WEEK: {"expected_results": ["+1w"]},
+        DateFilterOperators.NEXT_MONTH: {"expected_results": ["+1m"]},
+        DateFilterOperators.NEXT_YEAR: {"expected_results": ["+1y"]},
+        DateFilterOperators.NR_DAYS_AGO: {"expected_results": ["-1w"], "value": 7},
+        DateFilterOperators.NR_WEEKS_AGO: {"expected_results": ["-1w"], "value": 1},
+        DateFilterOperators.NR_MONTHS_AGO: {"expected_results": ["-1m"], "value": 1},
+        DateFilterOperators.NR_YEARS_AGO: {"expected_results": ["-1y"], "value": 1},
+        DateFilterOperators.NR_DAYS_FROM_NOW: {"expected_results": ["+1w"], "value": 7},
+        DateFilterOperators.NR_WEEKS_FROM_NOW: {
+            "expected_results": ["+1w"],
+            "value": 1,
+        },
+        DateFilterOperators.NR_MONTHS_FROM_NOW: {
+            "expected_results": ["+1m"],
+            "value": 1,
+        },
+        DateFilterOperators.NR_YEARS_FROM_NOW: {
+            "expected_results": ["+1y"],
+            "value": 1,
+        },
+        DateFilterOperators.EXACT_DATE: {
+            "expected_results": ["now"],
+            "value": "2024-05-24",
+        },
+    },
+    DateIsNotEqualMultiStepFilterType.type: {
+        DateFilterOperators.YESTERDAY: {
+            "expected_results": ["now", "+1d", "-1w", "-1m", "-1y", "+1w", "+1m", "+1y"]
+        },
+        DateFilterOperators.TODAY: {
+            "expected_results": ["-1d", "+1d", "-1w", "-1m", "-1y", "+1w", "+1m", "+1y"]
+        },
+        DateFilterOperators.TOMORROW: {
+            "expected_results": ["-1d", "now", "-1w", "-1m", "-1y", "+1w", "+1m", "+1y"]
+        },
+        DateFilterOperators.ONE_WEEK_AGO: {
+            "expected_results": ["-1d", "now", "+1d", "-1m", "-1y", "+1w", "+1m", "+1y"]
+        },
+        DateFilterOperators.ONE_MONTH_AGO: {
+            "expected_results": ["-1d", "now", "+1d", "-1w", "-1y", "+1w", "+1m", "+1y"]
+        },
+        DateFilterOperators.ONE_YEAR_AGO: {
+            "expected_results": ["-1d", "now", "+1d", "-1w", "-1m", "+1w", "+1m", "+1y"]
+        },
+        DateFilterOperators.THIS_WEEK: {
+            "expected_results": ["-1w", "-1m", "-1y", "+1w", "+1m", "+1y"]
+        },
+        DateFilterOperators.THIS_MONTH: {
+            "expected_results": ["-1y", "-1m", "+1m", "+1y"]
+        },
+        DateFilterOperators.THIS_YEAR: {"expected_results": ["-1y", "+1y"]},
+        DateFilterOperators.NEXT_WEEK: {
+            "expected_results": ["-1d", "now", "+1d", "-1w", "-1m", "-1y", "+1m", "+1y"]
+        },
+        DateFilterOperators.NEXT_MONTH: {
+            "expected_results": ["-1d", "now", "+1d", "-1w", "-1m", "-1y", "+1w", "+1y"]
+        },
+        DateFilterOperators.NEXT_YEAR: {
+            "expected_results": ["-1d", "now", "+1d", "-1w", "-1m", "-1y", "+1w", "+1m"]
+        },
+        DateFilterOperators.NR_DAYS_AGO: {
+            "expected_results": [
+                "-1d",
+                "now",
+                "+1d",
+                "-1m",
+                "-1y",
+                "+1w",
+                "+1m",
+                "+1y",
+            ],
+            "value": 7,
+        },
+        DateFilterOperators.NR_WEEKS_AGO: {
+            "expected_results": [
+                "-1d",
+                "now",
+                "+1d",
+                "-1m",
+                "-1y",
+                "+1w",
+                "+1m",
+                "+1y",
+            ],
+            "value": 1,
+        },
+        DateFilterOperators.NR_MONTHS_AGO: {
+            "expected_results": [
+                "-1d",
+                "now",
+                "+1d",
+                "-1w",
+                "-1y",
+                "+1w",
+                "+1m",
+                "+1y",
+            ],
+            "value": 1,
+        },
+        DateFilterOperators.NR_YEARS_AGO: {
+            "expected_results": [
+                "-1d",
+                "now",
+                "+1d",
+                "-1w",
+                "-1m",
+                "+1w",
+                "+1m",
+                "+1y",
+            ],
+            "value": 1,
+        },
+        DateFilterOperators.NR_DAYS_FROM_NOW: {
+            "expected_results": [
+                "-1d",
+                "now",
+                "+1d",
+                "-1w",
+                "-1m",
+                "-1y",
+                "+1m",
+                "+1y",
+            ],
+            "value": 7,
+        },
+        DateFilterOperators.NR_WEEKS_FROM_NOW: {
+            "expected_results": [
+                "-1d",
+                "now",
+                "+1d",
+                "-1w",
+                "-1m",
+                "-1y",
+                "+1m",
+                "+1y",
+            ],
+            "value": 1,
+        },
+        DateFilterOperators.NR_MONTHS_FROM_NOW: {
+            "expected_results": [
+                "-1d",
+                "now",
+                "+1d",
+                "-1w",
+                "-1m",
+                "-1y",
+                "+1w",
+                "+1y",
+            ],
+            "value": 1,
+        },
+        DateFilterOperators.NR_YEARS_FROM_NOW: {
+            "expected_results": [
+                "-1d",
+                "now",
+                "+1d",
+                "-1w",
+                "-1m",
+                "-1y",
+                "+1w",
+                "+1m",
+            ],
+            "value": 1,
+        },
+        DateFilterOperators.EXACT_DATE: {
+            "expected_results": [
+                "-1d",
+                "+1d",
+                "-1w",
+                "-1m",
+                "-1y",
+                "+1w",
+                "+1m",
+                "+1y",
+            ],
+            "value": "2024-05-24",
+        },
+    },
+    DateIsBeforeMultiStepFilterType.type: {
+        DateFilterOperators.YESTERDAY: {"expected_results": ["-1w", "-1m", "-1y"]},
+        DateFilterOperators.TODAY: {"expected_results": ["-1d", "-1w", "-1m", "-1y"]},
+        DateFilterOperators.TOMORROW: {
+            "expected_results": ["-1d", "now", "-1w", "-1m", "-1y"]
+        },
+        DateFilterOperators.ONE_WEEK_AGO: {"expected_results": ["-1m", "-1y"]},
+        DateFilterOperators.ONE_MONTH_AGO: {"expected_results": ["-1y"]},
+        DateFilterOperators.ONE_YEAR_AGO: {"expected_results": []},
+        DateFilterOperators.THIS_WEEK: {"expected_results": ["-1w", "-1m", "-1y"]},
+        DateFilterOperators.THIS_MONTH: {"expected_results": ["-1m", "-1y"]},
+        DateFilterOperators.THIS_YEAR: {"expected_results": ["-1y"]},
+        DateFilterOperators.NEXT_WEEK: {
+            "expected_results": ["-1d", "now", "+1d", "-1w", "-1m", "-1y"]
+        },
+        DateFilterOperators.NEXT_MONTH: {
+            "expected_results": ["-1d", "now", "+1d", "-1w", "-1m", "-1y", "+1w"]
+        },
+        DateFilterOperators.NEXT_YEAR: {
+            "expected_results": ["-1d", "now", "+1d", "-1w", "-1m", "-1y", "+1w", "+1m"]
+        },
+        DateFilterOperators.NR_DAYS_AGO: {
+            "expected_results": ["-1m", "-1y"],
+            "value": 7,
+        },
+        DateFilterOperators.NR_WEEKS_AGO: {
+            "expected_results": ["-1m", "-1y"],
+            "value": 1,
+        },
+        DateFilterOperators.NR_MONTHS_AGO: {"expected_results": ["-1y"], "value": 1},
+        DateFilterOperators.NR_YEARS_AGO: {"expected_results": [], "value": 1},
+        DateFilterOperators.NR_DAYS_FROM_NOW: {
+            "expected_results": ["-1d", "now", "+1d", "-1w", "-1m", "-1y"],
+            "value": 7,
+        },
+        DateFilterOperators.NR_WEEKS_FROM_NOW: {
+            "expected_results": ["-1d", "now", "+1d", "-1w", "-1m", "-1y"],
+            "value": 1,
+        },
+        DateFilterOperators.NR_MONTHS_FROM_NOW: {
+            "expected_results": ["-1d", "now", "+1d", "-1w", "-1m", "-1y", "+1w"],
+            "value": 1,
+        },
+        DateFilterOperators.NR_YEARS_FROM_NOW: {
+            "expected_results": [
+                "-1d",
+                "now",
+                "+1d",
+                "-1w",
+                "-1m",
+                "-1y",
+                "+1w",
+                "+1m",
+            ],
+            "value": 1,
+        },
+        DateFilterOperators.EXACT_DATE: {
+            "expected_results": ["-1d", "-1w", "-1m", "-1y"],
+            "value": "2024-05-24",
+        },
+    },
+    DateIsOnOrBeforeMultiStepFilterType.type: {
+        DateFilterOperators.YESTERDAY: {
+            "expected_results": ["-1d", "-1w", "-1m", "-1y"]
+        },
+        DateFilterOperators.TODAY: {
+            "expected_results": ["-1d", "now", "-1w", "-1m", "-1y"]
+        },
+        DateFilterOperators.TOMORROW: {
+            "expected_results": ["-1d", "now", "+1d", "-1w", "-1m", "-1y"]
+        },
+        DateFilterOperators.ONE_WEEK_AGO: {"expected_results": ["-1w", "-1m", "-1y"]},
+        DateFilterOperators.ONE_MONTH_AGO: {"expected_results": ["-1m", "-1y"]},
+        DateFilterOperators.ONE_YEAR_AGO: {"expected_results": ["-1y"]},
+        DateFilterOperators.THIS_WEEK: {
+            "expected_results": ["-1d", "now", "+1d", "-1w", "-1m", "-1y"]
+        },
+        DateFilterOperators.THIS_MONTH: {
+            "expected_results": ["-1d", "now", "+1d", "-1w", "-1m", "-1y", "+1w"]
+        },
+        DateFilterOperators.THIS_YEAR: {
+            "expected_results": ["-1d", "now", "+1d", "-1w", "-1m", "-1y", "+1w", "+1m"]
+        },
+        DateFilterOperators.NEXT_WEEK: {
+            "expected_results": ["-1d", "now", "+1d", "-1w", "-1m", "-1y", "+1w"]
+        },
+        DateFilterOperators.NEXT_MONTH: {
+            "expected_results": ["-1d", "now", "+1d", "-1w", "-1m", "-1y", "+1w", "+1m"]
+        },
+        DateFilterOperators.NEXT_YEAR: {
+            "expected_results": [
+                "-1d",
+                "now",
+                "+1d",
+                "-1w",
+                "-1m",
+                "-1y",
+                "+1w",
+                "+1m",
+                "+1y",
+            ]
+        },
+        DateFilterOperators.NR_DAYS_AGO: {
+            "expected_results": ["-1w", "-1m", "-1y"],
+            "value": 7,
+        },
+        DateFilterOperators.NR_WEEKS_AGO: {
+            "expected_results": ["-1w", "-1m", "-1y"],
+            "value": 1,
+        },
+        DateFilterOperators.NR_MONTHS_AGO: {
+            "expected_results": ["-1m", "-1y"],
+            "value": 1,
+        },
+        DateFilterOperators.NR_YEARS_AGO: {
+            "expected_results": ["-1y"],
+            "value": 1,
+        },
+        DateFilterOperators.NR_DAYS_FROM_NOW: {
+            "expected_results": ["-1d", "now", "+1d", "-1w", "-1m", "-1y", "+1w"],
+            "value": 7,
+        },
+        DateFilterOperators.NR_WEEKS_FROM_NOW: {
+            "expected_results": ["-1d", "now", "+1d", "-1w", "-1m", "-1y", "+1w"],
+            "value": 1,
+        },
+        DateFilterOperators.NR_MONTHS_FROM_NOW: {
+            "expected_results": [
+                "-1d",
+                "now",
+                "+1d",
+                "-1w",
+                "-1m",
+                "-1y",
+                "+1w",
+                "+1m",
+            ],
+            "value": 1,
+        },
+        DateFilterOperators.NR_YEARS_FROM_NOW: {
+            "expected_results": [
+                "-1d",
+                "now",
+                "+1d",
+                "-1w",
+                "-1m",
+                "-1y",
+                "+1w",
+                "+1m",
+                "+1y",
+            ],
+            "value": 1,
+        },
+        DateFilterOperators.EXACT_DATE: {
+            "expected_results": ["-1d", "now", "-1w", "-1m", "-1y"],
+            "value": "2024-05-24",
+        },
+    },
+    DateIsAfterMultiStepFilterType.type: {
+        DateFilterOperators.YESTERDAY: {
+            "expected_results": ["now", "+1d", "+1w", "+1m", "+1y"]
+        },
+        DateFilterOperators.TODAY: {"expected_results": ["+1d", "+1w", "+1m", "+1y"]},
+        DateFilterOperators.TOMORROW: {"expected_results": ["+1w", "+1m", "+1y"]},
+        DateFilterOperators.ONE_WEEK_AGO: {
+            "expected_results": ["-1d", "now", "+1d", "+1w", "+1m", "+1y"]
+        },
+        DateFilterOperators.ONE_MONTH_AGO: {
+            "expected_results": ["-1w", "-1d", "now", "+1d", "+1w", "+1m", "+1y"]
+        },
+        DateFilterOperators.ONE_YEAR_AGO: {
+            "expected_results": ["-1m", "-1w", "-1d", "now", "+1d", "+1w", "+1m", "+1y"]
+        },
+        DateFilterOperators.THIS_WEEK: {"expected_results": ["+1w", "+1m", "+1y"]},
+        DateFilterOperators.THIS_MONTH: {"expected_results": ["+1m", "+1y"]},
+        DateFilterOperators.THIS_YEAR: {"expected_results": ["+1y"]},
+        DateFilterOperators.NEXT_WEEK: {"expected_results": ["+1m", "+1y"]},
+        DateFilterOperators.NEXT_MONTH: {"expected_results": ["+1y"]},
+        DateFilterOperators.NEXT_YEAR: {"expected_results": []},
+        DateFilterOperators.NR_DAYS_AGO: {
+            "expected_results": ["-1d", "now", "+1d", "+1w", "+1m", "+1y"],
+            "value": 7,
+        },
+        DateFilterOperators.NR_WEEKS_AGO: {
+            "expected_results": ["-1d", "now", "+1d", "+1w", "+1m", "+1y"],
+            "value": 1,
+        },
+        DateFilterOperators.NR_MONTHS_AGO: {
+            "expected_results": ["-1w", "-1d", "now", "+1d", "+1w", "+1m", "+1y"],
+            "value": 1,
+        },
+        DateFilterOperators.NR_YEARS_AGO: {
+            "expected_results": [
+                "-1m",
+                "-1w",
+                "-1d",
+                "now",
+                "+1d",
+                "+1w",
+                "+1m",
+                "+1y",
+            ],
+            "value": 1,
+        },
+        DateFilterOperators.NR_DAYS_FROM_NOW: {
+            "expected_results": ["+1m", "+1y"],
+            "value": 7,
+        },
+        DateFilterOperators.NR_WEEKS_FROM_NOW: {
+            "expected_results": ["+1m", "+1y"],
+            "value": 1,
+        },
+        DateFilterOperators.NR_MONTHS_FROM_NOW: {
+            "expected_results": ["+1y"],
+            "value": 1,
+        },
+        DateFilterOperators.NR_YEARS_FROM_NOW: {
+            "expected_results": [],
+            "value": 1,
+        },
+        DateFilterOperators.EXACT_DATE: {
+            "expected_results": ["+1d", "+1w", "+1m", "+1y"],
+            "value": "2024-05-24",
+        },
+    },
+    DateIsOnOrAfterMultiStepFilterType.type: {
+        DateFilterOperators.YESTERDAY: {
+            "expected_results": ["-1d", "now", "+1d", "+1w", "+1m", "+1y"]
+        },
+        DateFilterOperators.TODAY: {
+            "expected_results": ["now", "+1d", "+1w", "+1m", "+1y"]
+        },
+        DateFilterOperators.TOMORROW: {
+            "expected_results": ["+1d", "+1w", "+1m", "+1y"]
+        },
+        DateFilterOperators.ONE_WEEK_AGO: {
+            "expected_results": ["-1w", "-1d", "now", "+1d", "+1w", "+1m", "+1y"]
+        },
+        DateFilterOperators.ONE_MONTH_AGO: {
+            "expected_results": ["-1m", "-1w", "-1d", "now", "+1d", "+1w", "+1m", "+1y"]
+        },
+        DateFilterOperators.ONE_YEAR_AGO: {
+            "expected_results": [
+                "-1y",
+                "-1m",
+                "-1w",
+                "-1d",
+                "now",
+                "+1d",
+                "+1w",
+                "+1m",
+                "+1y",
+            ]
+        },
+        DateFilterOperators.THIS_WEEK: {
+            "expected_results": ["-1d", "now", "+1d", "+1w", "+1m", "+1y"]
+        },
+        DateFilterOperators.THIS_MONTH: {
+            "expected_results": ["-1d", "now", "+1d", "-1w", "+1w", "+1m", "+1y"]
+        },
+        DateFilterOperators.THIS_YEAR: {
+            "expected_results": ["-1d", "now", "+1d", "-1m", "-1w", "+1w", "+1m", "+1y"]
+        },
+        DateFilterOperators.NEXT_WEEK: {"expected_results": ["+1w", "+1m", "+1y"]},
+        DateFilterOperators.NEXT_MONTH: {"expected_results": ["+1m", "+1y"]},
+        DateFilterOperators.NEXT_YEAR: {"expected_results": ["+1y"]},
+        DateFilterOperators.NR_DAYS_AGO: {
+            "expected_results": ["-1w", "-1d", "now", "+1d", "+1w", "+1m", "+1y"],
+            "value": 7,
+        },
+        DateFilterOperators.NR_WEEKS_AGO: {
+            "expected_results": ["-1w", "-1d", "now", "+1d", "+1w", "+1m", "+1y"],
+            "value": 1,
+        },
+        DateFilterOperators.NR_MONTHS_AGO: {
+            "expected_results": [
+                "-1m",
+                "-1w",
+                "-1d",
+                "now",
+                "+1d",
+                "+1w",
+                "+1m",
+                "+1y",
+            ],
+            "value": 1,
+        },
+        DateFilterOperators.NR_YEARS_AGO: {
+            "expected_results": [
+                "-1y",
+                "-1m",
+                "-1w",
+                "-1d",
+                "now",
+                "+1d",
+                "+1w",
+                "+1m",
+                "+1y",
+            ],
+            "value": 1,
+        },
+        DateFilterOperators.NR_DAYS_FROM_NOW: {
+            "expected_results": ["+1w", "+1m", "+1y"],
+            "value": 7,
+        },
+        DateFilterOperators.NR_WEEKS_FROM_NOW: {
+            "expected_results": ["+1w", "+1m", "+1y"],
+            "value": 1,
+        },
+        DateFilterOperators.NR_MONTHS_FROM_NOW: {
+            "expected_results": ["+1m", "+1y"],
+            "value": 1,
+        },
+        DateFilterOperators.NR_YEARS_FROM_NOW: {
+            "expected_results": ["+1y"],
+            "value": 1,
+        },
+        DateFilterOperators.EXACT_DATE: {
+            "expected_results": ["now", "+1d", "+1w", "+1m", "+1y"],
+            "value": "2024-05-24",
+        },
+    },
+    DateIsWithinMultiStepFilterType.type: {
+        DateFilterOperators.TOMORROW: {"expected_results": ["now", "+1d"]},
+        DateFilterOperators.NEXT_WEEK: {"expected_results": ["now", "+1d", "+1w"]},
+        DateFilterOperators.NEXT_MONTH: {
+            "expected_results": ["now", "+1d", "+1w", "+1m"]
+        },
+        DateFilterOperators.NEXT_YEAR: {
+            "expected_results": ["now", "+1d", "+1w", "+1m", "+1y"]
+        },
+        DateFilterOperators.NR_DAYS_FROM_NOW: {
+            "expected_results": ["now", "+1d", "+1w"],
+            "value": 7,
+        },
+        DateFilterOperators.NR_WEEKS_FROM_NOW: {
+            "expected_results": ["now", "+1d", "+1w"],
+            "value": 1,
+        },
+        DateFilterOperators.NR_MONTHS_FROM_NOW: {
+            "expected_results": ["now", "+1d", "+1w", "+1m"],
+            "value": 1,
+        },
+        DateFilterOperators.NR_YEARS_FROM_NOW: {
+            "expected_results": ["now", "+1d", "+1w", "+1m", "+1y"],
+            "value": 1,
+        },
+        DateFilterOperators.EXACT_DATE: {
+            "expected_results": ["now", "+1d"],
+            "value": "2024-05-25",
+        },
+    },
+}
+
+
+@pytest.mark.django_db
+def test_ensure_all_multi_step_filter_type_and_operators_are_tested(data_fixture):
+    for filter_type in view_filter_type_registry.get_all():
+        if not isinstance(filter_type, DateMultiStepViewFilterType):
+            continue
+        assert filter_type.type in DATE_MULTI_STEP_OPERATOR_VALID_RESULTS
+        for operator in filter_type.get_available_operators():
+            assert (
+                operator in DATE_MULTI_STEP_OPERATOR_VALID_RESULTS[filter_type.type]
+            ), f"{filter_type.type} is missing test for {operator.value}"
+            assert (
+                "expected_results"
+                in DATE_MULTI_STEP_OPERATOR_VALID_RESULTS[filter_type.type][operator]
+            ), f"'expected_results' missing for {filter_type.type} - {operator.value}"
+
+
+@pytest.fixture
+def table_view_fields_rows(data_fixture):
+    user = data_fixture.create_user()
+    table = data_fixture.create_database_table(user=user)
+    grid_view = data_fixture.create_grid_view(table=table)
+    date_field = data_fixture.create_date_field(table=table)
+    datetime_field = data_fixture.create_date_field(table=table, date_include_time=True)
+    rows = RowHandler().create_rows(
+        user,
+        table,
+        [
+            {
+                date_field.db_column: date_value,
+                datetime_field.db_column: date_value,
+            }
+            for date_value in TEST_MULTI_STEP_DATE_OPERATORS_DATETIMES
+        ],
+    )
+    return table, grid_view, date_field, datetime_field, rows
+
+
+@pytest.mark.parametrize(
+    "filter_type,operator,filter_value,expected_results",
+    [
+        (
+            filter_type,
+            opr.value,
+            opr_data.get("value", ""),
+            [MNEMONIC_VALUES[v] for v in opr_data["expected_results"]],
+        )
+        for filter_type in DATE_MULTI_STEP_OPERATOR_VALID_RESULTS.keys()
+        for (opr, opr_data) in DATE_MULTI_STEP_OPERATOR_VALID_RESULTS[
+            filter_type
+        ].items()
+    ],
+)
+@pytest.mark.django_db
+def test_date_equal_multi_step_operator_view_filter_type(
+    data_fixture,
+    filter_type,
+    operator,
+    filter_value,
+    expected_results,
+    table_view_fields_rows,
+):
+    table, grid_view, date_field, datetime_field, rows = table_view_fields_rows
+
+    handler = ViewHandler()
+    model = table.get_model()
+
+    def apply_filters_and_assert():
+        with freeze_time(FREEZED_TODAY):
+            qs = handler.apply_filters(grid_view, model.objects.all())
+            ids = set([r.id for r in qs.all()])
+        res_pos = [i for (i, r) in enumerate(rows) if r.id in ids]
+
+        mnem_keys = list(MNEMONIC_VALUES.keys())
+        mnem_res_pos = [mnem_keys[v] for v in res_pos]
+        mnem_exp_res = [mnem_keys[v] for v in expected_results]
+        assert res_pos == unordered(
+            expected_results
+        ), f"{filter_type} - {operator}: {mnem_res_pos} != {mnem_exp_res}"
+
+    # with date
+    view_filter = data_fixture.create_view_filter(
+        view=grid_view,
+        field=date_field,
+        type=filter_type,
+        value=f"UTC?{filter_value}?{operator}",
+    )
+
+    apply_filters_and_assert()
+
+    # with datetime
+    view_filter.field = datetime_field
+    view_filter.save()
+
+    apply_filters_and_assert()

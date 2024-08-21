@@ -26,47 +26,52 @@
       <div v-else>
         <Error :error="error"></Error>
         <form @submit.prevent="resetPassword">
-          <div class="auth__control">
-            <label class="auth__control-label">{{
-              $t('resetPassword.newPassword')
-            }}</label>
-            <div class="control__elements">
-              <PasswordInput
-                v-model="account.password"
-                :validation-state="$v.account.password"
-                :placeholder="$t('signup.passwordPlaceholder')"
-                :error-placeholder-class="'auth__control-error'"
-                :show-error-icon="true"
-              />
-            </div>
-          </div>
-          <div class="auth__control">
-            <label class="auth__control-label">{{
-              $t('resetPassword.repeatNewPassword')
-            }}</label>
-            <div class="control__elements">
-              <input
-                v-model="account.passwordConfirm"
-                :class="{ 'input--error': $v.account.passwordConfirm.$error }"
-                type="password"
-                class="input"
-                @blur="$v.account.passwordConfirm.$touch()"
-              />
-              <div class="auth__control-error">
-                <div v-if="$v.account.passwordConfirm.$error" class="error">
-                  {{ $t('error.notMatchingPassword') }}
-                </div>
-              </div>
-            </div>
-          </div>
+          <FormGroup
+            small-label
+            :label="$t('resetPassword.newPassword')"
+            required
+            class="margin-bottom-2"
+          >
+            <PasswordInput
+              v-model="account.password"
+              :validation-state="$v.account.password"
+              :placeholder="$t('signup.passwordPlaceholder')"
+              :error-placeholder-class="'auth__control-error'"
+              :show-error-icon="true"
+            />
+          </FormGroup>
+
+          <FormGroup
+            small-label
+            :label="$t('resetPassword.repeatNewPassword')"
+            required
+            class="margin-bottom-2"
+            :error="$v.account.passwordConfirm.$error"
+          >
+            <FormInput
+              v-model="account.passwordConfirm"
+              :error="$v.account.passwordConfirm.$error"
+              type="password"
+              size="large"
+              @blur="$v.account.passwordConfirm.$touch()"
+            >
+            </FormInput>
+
+            <template #error>
+              {{ $t('error.notMatchingPassword') }}
+            </template>
+          </FormGroup>
+
           <div class="auth__action">
-            <button
-              :class="{ 'button--loading': loading }"
-              class="button button--full-width"
-              :disabled="loading"
+            <Button
+              type="primary"
+              full-width
+              size="large"
+              :loading="loading"
+              :disabled="loading || success"
             >
               {{ $t('resetPassword.submit') }}
-            </button>
+            </Button>
           </div>
           <div>
             <ul class="auth__action-links">
@@ -86,10 +91,15 @@
         <i class="iconoir-check"></i>
       </div>
       <h1 class="box__message-title">{{ $t('resetPassword.changed') }}</h1>
-      <nuxt-link :to="{ name: 'login' }" class="button button--large">
-        <i class="iconoir-arrow-left"></i>
+      <Button
+        tag="nuxt-link"
+        :to="{ name: 'login' }"
+        size="large"
+        type="primary"
+        icon="iconoir-arrow-left"
+      >
         {{ $t('action.backToLogin') }}
-      </nuxt-link>
+      </Button>
     </div>
   </div>
 </template>

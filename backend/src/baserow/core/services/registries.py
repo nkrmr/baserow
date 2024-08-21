@@ -1,8 +1,10 @@
 from abc import ABC
 from enum import Enum
-from typing import Any, Dict, Optional, Tuple, Type, TypeVar
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar
+from zipfile import ZipFile
 
 from django.contrib.auth.models import AbstractUser
+from django.core.files.storage import Storage
 
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
@@ -45,7 +47,7 @@ class ServiceType(
 
     SerializedDict: Type[ServiceDictSubClass]
     parent_property_name = "integration"
-    id_mapping_name = "builder_services"
+    id_mapping_name = "services"
 
     # The maximum number of records this service is able to return.
     # By default, the maximum is `None`, which is unlimited.
@@ -130,6 +132,21 @@ class ServiceType(
 
         :param instance: The to be deleted service instance.
         """
+
+    def get_context_data(self, service: ServiceSubClass):
+        """
+        Return the context data for this service.
+
+        This can be overridden by child classes to provide extra context data,
+        to complement this service results.
+        """
+
+        return None
+
+    def get_context_data_schema(self, service: ServiceSubClass):
+        """Return the schema for the context data."""
+
+        return None
 
     def resolve_service_formulas(
         self,
@@ -229,6 +246,10 @@ class ServiceType(
         prop_name: str,
         value: Any,
         id_mapping: Dict[str, Any],
+        files_zip: Optional[ZipFile] = None,
+        storage: Optional[Storage] = None,
+        cache: Optional[Dict] = None,
+        import_formula: Callable[[str, Dict[str, Any]], str] = None,
         **kwargs,
     ) -> Any:
         """
@@ -241,10 +262,38 @@ class ServiceType(
         :return: the deserialized version for this property.
         """
 
-        if "import_formula" not in kwargs:
+        if import_formula is None:
             raise ValueError("Missing import formula function.")
 
-        return value
+        return super().deserialize_property(
+            prop_name,
+            value,
+            id_mapping,
+            files_zip=files_zip,
+            storage=storage,
+            cache=cache,
+            **kwargs,
+        )
+
+    def import_path(self, path, id_mapping, **kwargs):
+        """
+        Allows to hook into the path import resolution.
+
+        If not implemented, returns the path as it is.
+        """
+
+        return path
+
+    def import_context_path(
+        self, path: List[str], id_mapping: Dict[int, int], **kwargs
+    ):
+        """
+        Allows to hook into the context path import resolution.
+
+        If not implemented, returns the path as it is.
+        """
+
+        return path
 
 
 ServiceTypeSubClass = TypeVar("ServiceTypeSubClass", bound=ServiceType)
